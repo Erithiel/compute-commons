@@ -60,5 +60,9 @@ it("safeNext only allows same-site paths", () => {
   expect(safeNext("//evil.com", "/board")).toBe("/board");
   expect(safeNext("https://evil.com", "/board")).toBe("/board");
   expect(safeNext("/\\evil.com", "/board")).toBe("/board");
+  expect(safeNext("/\t/evil.com", "/board")).toBe("/board");
+  expect(safeNext("/\n/evil.com", "/board")).toBe("/board");
+  expect(safeNext("/ok\r", "/board")).toBe("/board");
+  expect(safeNext("/tasks/abc?x=1", "/board")).toBe("/tasks/abc?x=1");
   expect(safeNext(null, "/board")).toBe("/board");
 });

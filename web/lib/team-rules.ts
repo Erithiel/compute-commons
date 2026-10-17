@@ -34,4 +34,4 @@ export const loginLocked = (a: { fails: number; windowStart: string } | null, no
 
 /** Only same-site paths: blocks open redirects through ?next=. */
 export const safeNext = (next: string | null | undefined, fallback: string) =>
-  next && /^\/(?![/\\])/.test(next) ? next : fallback;
+  next && /^\/(?![/\\])[^\x00-\x1f\x7f]*$/.test(next) ? next : fallback;
