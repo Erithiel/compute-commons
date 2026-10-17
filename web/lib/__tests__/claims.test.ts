@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { canTake, isEligible, sortWork } from "../claims";
-import type { Task, TaskItem, Claim } from "../types";
+import { canTake, gaveUpRecently, isEligible, sortWork } from "../claims";
+import type { Task, TaskItem, Claim, Log } from "../types";
 
 const task = (o: Partial<Task> = {}): Task => ({ $id: "k1", teamId: "t", title: "T", repeatDays: 0, repeatFor: 0, columns: [], assignees: [], currentVersion: 1, ...o });
 const item = (o: Partial<TaskItem> = {}): TaskItem => ({
@@ -44,4 +44,18 @@ it("no assignees means anyone; otherwise only those listed", () => {
 it("orders never-done first, then oldest done", () => {
   const is = [item({ $id: "a", lastDoneAt: "2026-10-10T00:00:00Z" }), item({ $id: "b" }), item({ $id: "c", lastDoneAt: "2026-10-01T00:00:00Z" })];
   expect(sortWork(is).map((i) => i.$id)).toEqual(["b", "c", "a"]);
+});
+
+describe("gaveUpRecently", () => {
+  const log = (o: Partial<Log> = {}) => ({ by: "me", outcome: "failed", finishedAt: "2026-10-20T11:00:00Z", ...o }) as Log;
+  it("holds back my own recent fail or skip", () => {
+    expect(gaveUpRecently(log(), "me", now)).toBe(true);
+    expect(gaveUpRecently(log({ outcome: "skipped" }), "me", now)).toBe(true);
+  });
+  it("not someone else's, not a done, not after 12h, not with no log", () => {
+    expect(gaveUpRecently(log({ by: "other" }), "me", now)).toBe(false);
+    expect(gaveUpRecently(log({ outcome: "done" }), "me", now)).toBe(false);
+    expect(gaveUpRecently(log({ finishedAt: "2026-10-19T23:59:00Z" }), "me", now)).toBe(false);
+    expect(gaveUpRecently(null, "me", now)).toBe(false);
+  });
 });

@@ -34,7 +34,7 @@ async function main() {
   await assert.rejects(connect("cc_wrong"), "an unknown token must get 401");
   const L = await connect((await createToken(TEAM_ID, lead.$id, "smoke")).token);
   const M = await connect((await createToken(TEAM_ID, mem.$id, "smoke")).token);
-  assert.match(L.getInstructions() ?? "", /next_task/);
+  assert.match(L.getInstructions() ?? "", /next_task[\s\S]*subagent/);
 
   // Worker tools
   const tools = (await M.listTools()).tools.map((t) => t.name);
@@ -42,16 +42,16 @@ async function main() {
   await saveTask(TEAM_ID, null, { title: "Smoke work", prompt: "Say hi", repeatDays: 0, assignees: [], rows: ["a", "b"] }, lead.$id);
   assert.match(text(await call(M, "save_my_note", { task: "smoke work", text: "My files are in D:/x" })), /Saved your note/);
 
-  const first = json<{ itemId: string; prompt: string }>(await call(M, "next_task"));
-  assert.match(first.prompt, /Say hi[\s\S]*My files are in D:\/x[\s\S]*Item: a/);
+  const first = json<{ itemId: string; brief: string }>(await call(M, "next_task"));
+  assert.match(first.brief, new RegExp(`itemId: ${first.itemId}[\\s\\S]*DONE, FAILED or SKIPPED[\\s\\S]*Say hi[\\s\\S]*My files are in D:/x[\\s\\S]*Item: a`));
   assert.match(text(await call(L, "claim", { itemId: first.itemId })), /Not claimed: Someone else/);
   assert.notEqual((await call(M, "heartbeat", { itemId: first.itemId })).isError, true);
   assert.equal((await call(L, "complete", { itemId: first.itemId, summary: "x" })).isError, true, "only the holder can finish");
   assert.match(text(await call(M, "complete", { itemId: first.itemId, summary: "said hi", details: "in chat" })), /Logged as done/);
 
-  const second = json<{ itemId: string; prompt: string }>(await call(L, "next_task"));
-  assert.match(second.prompt, /Item: b/);
-  assert.doesNotMatch(second.prompt, /D:\/x/, "a note reaches only its owner");
+  const second = json<{ itemId: string; brief: string }>(await call(L, "next_task"));
+  assert.match(second.brief, /Item: b/);
+  assert.doesNotMatch(second.brief, /D:\/x/, "a note reaches only its owner");
   assert.match(text(await call(L, "skip", { itemId: second.itemId, reason: "smoke" })), /Logged as skipped/);
   const again = json<{ itemId: string }>(await call(M, "next_task"));
   assert.equal(again.itemId, second.itemId, "a skipped item comes back");

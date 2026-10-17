@@ -152,11 +152,12 @@ The server also sends `instructions` when Claude connects: the workflow for doin
 The Claude scheduled task holds one line, copied once from the app's "Connect Claude" page (`/setup`):
 
 ```
-Use the "commons" MCP connector and work through our team's task queue.
+Use the "commons" MCP connector and work through our team's task queue until it is empty.
 ```
 
-Everything else comes from our server, so changing a task or the rules changes what tonight's run does without re-pasting:
-- **How to work** (next_task → work → heartbeat → complete/fail/skip → repeat until empty) is the MCP server's `instructions`, sent when Claude connects.
+Everything else comes from our server, so changing a task or the rules changes what tonight's run does without re-pasting or installing anything:
+- **How to work** is the MCP server's `instructions`, sent when Claude connects. The schedule only dispatches: next_task → one fresh subagent per item → repeat until empty. The stopper is on the server: `next_task` holds back an item from the member who failed or skipped it for 12 hours (`RETRY_AFTER_HOURS` in `lib/claims.ts`), so a run always reaches "nothing left"; teammates can still take it. As a backup, an item that comes back in the same run is failed and the run stops.
+- **What the subagent gets** is the `brief` in every `next_task` reply (`workerBrief` in `lib/mcp/instructions.ts`): the worker rules (heartbeat, finish with complete/fail/skip, end with DONE/FAILED/SKIPPED) followed by the task. It travels in the tool reply, not only the connect instructions, because clients may truncate long instructions.
 - **The task itself** (team policy + task prompt + `Item: <row>` for a row) comes from `next_task` / `get_task`.
 
 ## 9. Repository layout

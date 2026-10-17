@@ -29,6 +29,11 @@ export function isEligible(item: TaskItem, task: Task, claim: Claim | null, now:
 export const repeatEnded = (task: Task, now: Date) =>
   !!task.repeatFor && !!task.$createdAt && now.getTime() >= new Date(task.$createdAt).getTime() + task.repeatFor * DAY;
 
+/** next_task holds back an item from the member who failed or skipped it for this long, so a run always reaches "nothing left". */
+export const RETRY_AFTER_HOURS = 12;
+export const gaveUpRecently = (log: Log | null, memberId: string, now: Date) =>
+  !!log && log.by === memberId && log.outcome !== "done" && now.getTime() - new Date(log.finishedAt).getTime() < RETRY_AFTER_HOURS * 3_600_000;
+
 /** Never-done first, then oldest done; ties keep the given order (task order, then row position). */
 export const sortWork = (items: TaskItem[]) =>
   [...items].sort((a, b) => (a.lastDoneAt ? new Date(a.lastDoneAt).getTime() : -Infinity) - (b.lastDoneAt ? new Date(b.lastDoneAt).getTime() : -Infinity)
@@ -117,7 +122,10 @@ export async function claim(itemId: string, caller: Caller, leaseMinutes = LEASE
 
 /** Claim the best free item for the caller (the next_task MCP tool), or null when nothing is left. */
 export async function claimNext(caller: Caller): Promise<{ item: TaskItem; task: Task; leaseUntil: string } | null> {
-  for (const { item, task } of await listEligible(caller, 25)) {
+  const now = new Date();
+  // ponytail: looks at the first 100 free items only; page through listEligible if one member gives up on more than that in 12h.
+  for (const { item, task, lastLog } of await listEligible(caller, 100)) {
+    if (gaveUpRecently(lastLog, caller.memberId, now)) continue;
     const r = await claim(item.$id, caller);
     if (r.ok) return { item, task, leaseUntil: r.leaseUntil };
   }

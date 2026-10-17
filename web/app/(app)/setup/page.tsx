@@ -48,7 +48,7 @@ export default async function SetupPage() {
               <li><b>Connectors:</b> make sure <code className="rounded bg-hover px-1">commons</code> is on.</li>
             </ol>
             <p className="mt-3 text-sm text-muted">
-              That&apos;s all it needs: the tasks, and how to work on them, come from this app on every run.
+              That&apos;s all it needs: how to work (until the queue is empty, each task in its own fresh subagent) and the tasks themselves come from this app on every run.
             </p>
             <details className="mt-3">
               <summary className={`cursor-pointer text-xs ${link}`}>What our server tells Claude when it connects</summary>

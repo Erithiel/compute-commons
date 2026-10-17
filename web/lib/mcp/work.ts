@@ -2,9 +2,10 @@
 import "server-only";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
-import { claim, claimNext, finish, heartbeat, listEligible, recordSkip, type ClaimFail } from "../claims";
+import { claim, claimNext, finish, heartbeat, listEligible, recordSkip, RETRY_AFTER_HOURS, type ClaimFail } from "../claims";
 import { claudePrompt, itemState, itemsOf, loadStore, repeatLabel } from "../mock";
 import { saveNote } from "../tasks";
+import { workerBrief } from "./instructions";
 import { ok, pickOne, run } from "./reply";
 
 const itemIdArg = z.string().describe("The itemId from next_task, list_work or view_task.");
@@ -22,11 +23,11 @@ export function registerWorkTools(server: McpServer) {
     inputSchema: z.object({}),
   }, async (_args, ctx) => run(ctx, async (caller) => {
     const got = await claimNext(caller);
-    if (!got) return ok("Nothing left for you. Stop.", { empty: true });
+    if (!got) return ok(`Nothing left for you. Stop. (Items you failed or skipped in the last ${RETRY_AFTER_HOURS}h are held back from you.)`, { empty: true });
     const s = await loadStore(caller.teamId);
-    return ok(`Claimed "${got.task.title}"${rowLabel(got.item.text)} until ${got.leaseUntil}. Do the prompt, then call complete, fail or skip with this itemId.`, {
+    return ok(`Claimed "${got.task.title}"${rowLabel(got.item.text)} until ${got.leaseUntil}. Start a fresh subagent and give it \`brief\` word for word; it finishes the item itself.`, {
       itemId: got.item.$id, task: got.task.title, item: got.item.text, leaseUntil: got.leaseUntil,
-      prompt: claudePrompt(s, got.task, got.item, caller.memberId),
+      brief: workerBrief(got.item.$id, claudePrompt(s, got.task, got.item, caller.memberId)),
     });
   }));
 
@@ -53,6 +54,7 @@ export function registerWorkTools(server: McpServer) {
     if (!item || !task) throw new Error(`No item ${itemId}. Use list_work or view_task to find item ids.`);
     return ok(`"${task.title}"${rowLabel(item.text)}: ${itemState(s, item).label}.`, {
       itemId, task: task.title, item: item.text, prompt: claudePrompt(s, task, item, caller.memberId),
+      brief: workerBrief(itemId, claudePrompt(s, task, item, caller.memberId)), // for a subagent, once claimed
     });
   }));
 
