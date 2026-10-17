@@ -26,6 +26,7 @@ Short record of what the team has decided, parked or assigned. Newest at the bot
 | D14 | Security and roles weight | Team mode is inside a trusted startup team, so heavy security (trust ladder, security checker roles, threat model) is **not critical** and stays parked with clan mode. **Roles are a standalone permissions feature** (Lead, Member). Basic safety rules stay: branch output (never `main`), no secrets in workspaces, bounded runs, only leads edit skills. |
 
 | D15 | Branching strategy | **The client chooses it.** Not every task or result has to be a new branch: the client picks a branch per task, per run, per target, one shared working branch, or their own convention. It is set in the team policy prefix (a routine prefix may override it). Still never a direct change to `main`; a human reviews and merges. |
+| D16 | One concept: tasks | **No separate targets, skills or routines.** A task is a title, description and prompt, either one-off or routine (redo every N days), with an optional item list (one line per site, repo, file…) where each line is claimed separately so nobody doubles up. Every attempt writes a log (who, when, what, branch). Targets added a page, kinds and tags without a benefit a plain list doesn't give. Revises D12/D13 wording ("skill on a target" → "task item"). |
 
 ## Consequences of D4 (to design)
 

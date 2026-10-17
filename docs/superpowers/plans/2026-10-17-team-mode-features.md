@@ -2,28 +2,45 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Before starting a feature, write its detailed step plan from the feature's section below (superpowers:writing-plans), on its own branch.
 
-**Goal:** Build team mode: a web app where a team stores skills and targets, and a remote MCP server that lets a person's Claude Code or a scheduled Claude routine pick work, claim it without collisions, run the skill, and report a branch back.
+**Goal:** Build team mode: a web app where a team writes **tasks** (a prompt for any repeatable job), and a remote MCP server from which a person's Claude Code or a scheduled Claude task fetches work, claims it without collisions, does it, and writes a **log** back (who, when, what, branch).
 
-**Architecture:** One Next.js app in `web/` holds the pages, server actions and the MCP endpoint (`/api/mcp`). Appwrite 1.8 TablesDB on api.rando.ge stores everything. Anthropic routines are the scheduler; we run no background jobs.
+**Architecture:** One Next.js app in `web/` holds the pages, server actions and the MCP endpoint (`/api/mcp`). Appwrite 1.8 TablesDB on api.rando.ge stores everything. Claude's scheduled tasks are the scheduler; we run no background jobs.
 
-**Tech Stack:** Next.js 16 + TypeScript, React 19, Appwrite TablesDB (`node-appwrite`, major matching server 1.8.x), `mcp-handler` + `@modelcontextprotocol/server`, `zod`, Tailwind 4 + shadcn/ui, `vitest`, Vercel.
+**Tech Stack:** Next.js 16 + TypeScript, React 19, Appwrite TablesDB (`node-appwrite` 22.1.3, matching server 1.8.1), `mcp-handler` + `@modelcontextprotocol/server`, `zod`, Tailwind 4, `vitest`, Vercel.
 
-**Spec:** `IDEA.md` (sections 2–8), `TECH.md` (all), `DECISIONS.md` (D6, D9–D14).
+**Spec:** `IDEA.md` (sections 2–8), `TECH.md` (all), `DECISIONS.md` (D6, D9–D16).
+
+## The model in one paragraph
+
+A **task** is a title, a description and a prompt. It is either **one-off** (done once) or **routine** (comes back every N days). A task can optionally have an **item list** (for example 10 websites): one prompt, and each line becomes its own unit of work with its own claim, so "add the SEO skill to every site" is one task and nobody does the same site twice. There are no separate targets, skills or routines (D16). Every attempt writes a **log**: who, when, outcome, summary, branch. A Claude scheduled task holds one line ("use the commons connector and work through our team's queue"); everything else comes from our server.
+
+## Current state (2026-10-17)
+
+A clickable **mock UI** exists in `web/` and is the starting point for every feature:
+- Pages built: Board, Skills, Targets, Routines, Connect Claude (`/setup`), Settings, Login. Data comes from an in-memory store, `web/lib/mock.ts`, which resets on restart. Mock server actions are in `web/app/actions.ts`.
+- **⚠ The mock UI still uses the old model** (skills × targets, routines). The first UI change is to rework it to this plan: one **Tasks** page (list + editor with mode, redo days, item list) replaces Skills, Targets and Routines; Board shows task items; a **Logs** list is added. Do this before F2 starts.
+- **How a feature replaces the mock:** keep the page, swap its data calls and actions for Appwrite, move its actions into the feature's own `actions.ts`, and delete its slice of `mock.ts`. When `mock.ts` is empty, delete it and the "mock data" badge in the sidebar.
+- **Pages use route groups:** `web/app/(app)/<page>` for signed-in pages, sharing the sidebar layout and auth guard, and `web/app/(auth)/login`.
+- **Appwrite is connected:** project `hakatoni` (`6ad3926b000731cc9576`) on api.rando.ge. The sidebar pings it on every load. `node-appwrite` is pinned to **22.1.3**, the last SDK built for API 1.8.1; its `ping()` returns `{ message: "Pong!" }`, not a string. An API key is still needed in `web/.env.local`.
+- **Next.js 16 quirk:** this scaffold enables `cacheComponents`. Request-time data must sit under a `<Suspense>`: `(app)/layout.tsx` wraps the shell and `(app)/loading.tsx` wraps pages. Read data through an async function that calls `await connection()` (see `db()` in `mock.ts`). A dev-only "Insight" badge about instant navigation is expected and harmless.
+- **Styling:** plain Tailwind with tokens in `globals.css` and primitives in `web/components/ui.tsx`. shadcn is deferred until a component needs it.
 
 ## Global Constraints
 
 - Team mode only. Clan mode is parked; do not build trust ladders or security-checker roles.
-- Results land on git branches following the client's branching strategy (set in the team policy prefix, see `DECISIONS.md` D15); nothing in our system writes to `main` of a target repo.
+- Results land on git branches following the client's branching strategy (set in the team policy, see `DECISIONS.md` D15); nothing in our system writes to `main` of a repo.
 - The browser never talks to Appwrite directly in v1. All data access is server-side with the API key, after a role check.
 - Roles: `lead` and `member` only (permission table in `IDEA.md` §7).
-- Skill edits create a new immutable version. Unattended routines run only the approved version.
-- Prompt order is always: team policy, then routine prefix, then skill.
+- Task prompt edits create a new immutable version. Unattended (schedule) runs only take tasks with an approved version, and run that version.
+- Prompt order is always: team policy, then task prompt.
+- Tasks are generic: any repeatable job. No hard-coded kinds of work (websites, repos, PRs…); those are just words in a prompt or lines in an item list.
 - No scheduler, cron or background worker in our code. Lease expiry is checked when a claim is read.
+- No double work: Claude works on an item only after a successful `claim`. The claim is atomic (F4), `list_work` never offers claimed items, and a second claim returns "taken".
+- The Claude schedule holds only a one-line setup prompt. How to work (MCP server `instructions`) and the task itself (`get_task`) always come from our server, so changes never need a re-paste.
 - No tokens in URLs. MCP auth uses a header (`Authorization: Bearer <token>`).
 - Store only hashes of API tokens.
-- Every change to skills, policies, routines, members and tokens writes an audit entry.
+- Every change to tasks, the team policy, settings, members and tokens writes an audit entry.
 - Secrets live in environment variables, never in the repo.
-- Targets are generic (`kind` is free text). Do not hard-code websites.
 
 ---
 
@@ -31,48 +48,42 @@
 
 ```
 F0 Foundation (setup, schema, shared contracts)  ← owner: you
- ├─► F1 Auth & members ───────────────┐
- ├─► F2 Skills library ───┐           │
- ├─► F3 Targets ──────────┤           │
- ├─► F4 Prompt builder ───┤ (pure)    │
- ├─► F5 Claim engine ─────┤ (pure+DB) │
- │                        ▼           │
- │                 F6 Work items      │
- │                        │           │
- │        ┌───────────────┼───────────┤
- │        ▼               ▼           ▼
- │   F8 Board      F9 Routines   F7 MCP endpoint + tokens
- │        └───────────────┴───────────┤
- │                                    ▼
- └──────────────────────────► F10 Demo: one real routine end to end
+ ├─► F1 Auth & members ─────────────────┐
+ ├─► F2 Tasks (editor, versions, items) ┤
+ ├─► F3 Prompt builder + team policy ───┤ (pure)
+ ├─► F4 Claim engine + work queue ──────┤ (pure + DB)
+ │                                      ▼
+ │                ┌─────────────────────┴───────┐
+ │                ▼                             ▼
+ │      F5 MCP endpoint + Connect Claude   F6 Board + logs
+ │                └─────────────┬───────────────┘
+ │                              ▼
+ └──────────────────────► F7 Demo: one real schedule end to end
 ```
 
 | ID | Feature | Depends on | Can start after | Size |
 |---|---|---|---|---|
 | F0 | Foundation: app, UI shell, Appwrite schema, shared types, CI, deploy | – | now | M |
 | F1 | Auth & members (login, session, role guard, members page) | F0 | F0 | M |
-| F2 | Skills library (list, editor, versions, approve, requires, risk label) | F0 (+F1 guard, can stub) | F0 | M |
-| F3 | Targets (list, add, tags, paste a list) | F0 (+F1 guard, can stub) | F0 | S |
-| F4 | Prompt builder (merge policy + prefix + skill, fill `{{blanks}}`) + team policy page | F0 types | F0 | S |
-| F5 | Claim engine (claim, heartbeat, finish, eligibility) | F0 types + schema | F0 | M |
-| F6 | Work items (skill × target rows, eligible list) | F2, F3, F5 | F2+F3+F5 | S |
-| F7 | MCP endpoint + API tokens (8 tools, token page) | F1, F4, F5, F6 | F6 | M |
-| F8 | Board (who is on what, free, done, failed, results) | F5, F6 | F6 | S |
-| F9 | Routines (config, prefix, budget, cooldown, "copy routine prompt") | F2, F3, F4, F6 | F6 | S |
-| F10 | Demo: a real Claude routine runs a real skill on 3–5 targets | all | F7+F9 | S |
+| F2 | Tasks (list, editor, one-off/routine, item list, versions, approve, suggest) | F0 (+F1 guard, can stub) | F0 | M |
+| F3 | Prompt builder (team policy + task prompt, fill `{{item}}`) + team policy & budget settings | F0 types | F0 | S |
+| F4 | Claim engine + work queue (claim, heartbeat, finish, skip, eligibility, ordering) | F0 types + schema | F0 | M |
+| F5 | MCP endpoint + tokens + Connect Claude page (8 tools, server instructions, one-line setup prompt) | F1, F2, F3, F4 | F2+F4 | M |
+| F6 | Board + logs (who is on what, free, done, failed, log history, add a quick one-off task) | F2, F4 | F2+F4 | S |
+| F7 | Demo: a real Claude schedule runs a real task over 3–5 items | all | F5+F6 | S |
 
 **Parallel tracks (example for 3–4 people):**
 - **Track A (you):** F0, then F1.
-- **Track B (logic):** F4 and F5 right after F0. Pure functions with tests; little UI.
-- **Track C (UI):** F2 and F3 right after F0, using the stub role guard until F1 lands.
-- **Then:** F6 (whoever finishes first), then F7 / F8 / F9 in parallel, then F10 together.
+- **Track B (logic):** F3 and F4 right after F0. Pure functions with tests; little UI.
+- **Track C (UI):** rework the mock UI to the Task model, then F2, using the stub role guard until F1 lands.
+- **Then:** F5 and F6 in parallel, then F7 together.
 
 ## 2. Working agreement
 
-- **Branches:** `feat/f0-foundation`, `feat/f1-auth`, `feat/f2-skills`, … One feature per branch, PR into `main`.
+- **Branches:** `feat/f0-foundation`, `feat/f1-auth`, `feat/f2-tasks`, … One feature per branch, PR into `main`.
 - **Folder ownership** (avoids merge conflicts): each feature owns the folders listed under its **Files**. Shared files (`web/lib/types.ts`, `web/lib/appwrite.ts`, `web/scripts/setup-appwrite.ts`) are owned by F0; later changes to them go in a small separate PR announced to the team.
 - **Definition of done:** typecheck, lint and `vitest` pass in CI; the feature's acceptance checks below pass on a preview deploy; audit entries are written where required; PR reviewed by one other person.
-- **Commits:** small, imperative ("feat(skills): approve a version").
+- **Commits:** small, imperative ("feat(tasks): approve a version").
 
 ---
 
@@ -85,55 +96,55 @@ Everyone codes against these names. If one must change, change it in one PR and 
 ```ts
 export type Role = "lead" | "member";
 export type RiskLabel = "report-only" | "changes-files";
-export type WorkStatus = "available" | "done" | "failed" | "skipped";
+export type TaskMode = "once" | "routine";
+export type ItemStatus = "available" | "done" | "failed" | "skipped";
 export type Outcome = "done" | "failed" | "skipped";
 
 export type Caller =
   | { kind: "member"; memberId: string; role: Role }
-  | { kind: "routine"; routineId: string };
+  | { kind: "team" }; // a Claude schedule's token: takes approved tasks only
 
 export interface Member { $id: string; teamId: string; userId: string; name: string; role: Role }
-export interface Skill {
-  $id: string; teamId: string; slug: string; title: string; description: string;
-  currentVersion: number; approvedVersion: number | null; requires: string[];
+export interface Task {
+  $id: string; teamId: string; title: string; description: string;
+  mode: TaskMode; redoDays: number;      // routine: comes back after redoDays; once: 0
+  items: string[];                       // optional list; [] = the task is a single item
+  requires: string[];                    // tools/keys the run needs, e.g. ["gh", "node"]
+  priority: number;
+  currentVersion: number; approvedVersion: number | null;
 }
-export interface SkillVersion {
-  $id: string; skillId: string; version: number; prompt: string;
-  inputs: string[]; riskLabel: RiskLabel; authorId: string; createdAt: string;
+export interface TaskVersion {
+  $id: string; taskId: string; version: number; prompt: string; // markdown, may use {{item}}
+  riskLabel: RiskLabel; authorId: string; createdAt: string;
 }
-export interface Policy { $id: string; teamId: string; scope: "team" | "routine"; prefix: string }
-export interface Target { $id: string; teamId: string; kind: string; name: string; ref: string; tags: string[] }
-export interface Routine {
-  $id: string; teamId: string; name: string; skillId: string; policyId: string | null;
-  targetTags: string[]; targetIds: string[]; maxItems: number; maxMinutes: number;
-  cooldownDays: number; enabled: boolean;
+export interface TaskItem {              // the unit of work and of claiming
+  $id: string; teamId: string; taskId: string; item: string; // "" when the task has no list
+  status: ItemStatus; lastDoneAt: string | null; lastLogId: string | null;
 }
-export interface WorkItem {
-  $id: string; teamId: string; skillId: string; targetId: string; status: WorkStatus;
-  lastDoneAt: string | null; lastResultId: string | null; priority: number;
+export interface Claim { $id: string /* = taskItemId */; by: string /* memberId or "team" */; claimedAt: string; leaseUntil: string }
+export interface Log {
+  $id: string; taskItemId: string; taskId: string; by: string; outcome: Outcome; summary: string;
+  branchUrl: string | null; version: number; startedAt: string; finishedAt: string;
 }
-export interface Claim { $id: string /* = workItemId */; by: string /* memberId or routineId */; claimedAt: string; leaseUntil: string }
-export interface Result {
-  $id: string; workItemId: string; by: string; outcome: Outcome; summary: string;
-  branchUrl: string | null; skillVersion: number; startedAt: string; finishedAt: string;
-}
-export interface ApiToken { $id: string; memberId: string; name: string; tokenHash: string; lastUsedAt: string | null; revoked: boolean }
+export interface Settings { $id: string; teamId: string; policy: string; maxItemsPerRun: number; maxMinutesPerRun: number }
+export interface ApiToken { $id: string; owner: string /* memberId or "team" */; name: string; tokenHash: string; lastUsedAt: string | null; revoked: boolean }
 export interface AuditEntry { $id: string; teamId: string; actor: string; action: string; entity: string; before: string | null; after: string | null; at: string }
 ```
 
-Notes: `inputs` is the list of blank names (`["url", "branchPrefix"]`); simpler than a JSON schema for v1. `targetTags`/`targetIds` replace the `targetFilter` in TECH §3 (either matches). `teamId` is a constant from env in v1 (`TEAM_ID`).
+Notes: `teamId` is a constant from env in v1 (`TEAM_ID`). The only blank in v1 is `{{item}}`; a task without an item list should not use it.
 
 ### 3.2 Module signatures
 
 | Module | Owner | Exports |
 |---|---|---|
-| `web/lib/appwrite.ts` | F0 | `adminTables(): TablesDB`, `adminUsers(): Users`, `sessionAccount(): Promise<Account \| null>`, `DB_ID`, `T` (table id constants: `T.members`, `T.skills`, `T.skillVersions`, `T.policies`, `T.targets`, `T.routines`, `T.workItems`, `T.claims`, `T.results`, `T.apiTokens`, `T.audit`), `TEAM_ID` |
+| `web/lib/appwrite.ts` | F0 | `adminTables(): TablesDB`, `adminUsers(): Users`, `sessionAccount(): Promise<Account \| null>`, `ping(): Promise<boolean>`, `DB_ID`, `T` (table ids: `T.members`, `T.tasks`, `T.taskVersions`, `T.taskItems`, `T.claims`, `T.logs`, `T.settings`, `T.apiTokens`, `T.audit`), `TEAM_ID` |
 | `web/lib/audit.ts` | F0 | `audit(actor: string, action: string, entity: string, before?: unknown, after?: unknown): Promise<void>` |
 | `web/lib/auth.ts` | F1 (stub in F0) | `getMember(): Promise<Member \| null>`, `requireMember(): Promise<Member>`, `requireLead(): Promise<Member>` (throw `Forbidden`) |
-| `web/lib/prompt.ts` | F4 | `fillBlanks(template: string, values: Record<string,string>): { text: string; missing: string[] }`, `buildPrompt(p: { teamPolicy: string; routinePrefix: string; skillPrompt: string; values: Record<string,string> }): { text: string; missing: string[] }` |
-| `web/lib/claims.ts` | F5 | `isEligible(item: WorkItem, claim: Claim \| null, now: Date, cooldownDays: number): boolean`, `claim(workItemId: string, by: string, leaseMinutes?: number): Promise<{ ok: true; leaseUntil: string } \| { ok: false; reason: "taken" \| "not-found" }>`, `heartbeat(workItemId: string, by: string, leaseMinutes?: number): Promise<{ ok: boolean; leaseUntil?: string }>`, `finish(workItemId: string, by: string, outcome: "done" \| "failed", data: { summary: string; branchUrl?: string; skillVersion: number }): Promise<Result>` (startedAt = the claim's `claimedAt`), `recordSkip(workItemId: string, by: string, reason: string, skillVersion: number): Promise<Result>` (no claim needed) |
-| `web/lib/work.ts` | F6 | `ensureWorkItems(skillId: string, targetIds: string[]): Promise<number>` (returns rows created), `listEligible(opts: { routineId?: string; skillId?: string; limit?: number }): Promise<Array<{ item: WorkItem; skill: Skill; target: Target; lastResult: Result \| null }>>` |
-| `web/lib/tokens.ts` | F7 | `createToken(memberId: string, name: string): Promise<{ token: string; row: ApiToken }>`, `verifyBearer(header: string \| null): Promise<Caller \| null>`, `revokeToken(id: string): Promise<void>` |
+| `web/lib/tasks.ts` | F2 | `nextVersion(current: number): number`, `parseItems(text: string): string[]`, `ensureItems(taskId: string, items: string[]): Promise<number>` (rows created) |
+| `web/lib/prompt.ts` | F3 | `fillBlanks(template: string, values: Record<string,string>): { text: string; missing: string[] }`, `buildPrompt(p: { teamPolicy: string; taskPrompt: string; values: Record<string,string> }): { text: string; missing: string[] }` |
+| `web/lib/claims.ts` | F4 | `isEligible(item: TaskItem, claim: Claim \| null, now: Date, redoDays: number): boolean`, `claim(itemId: string, by: string, leaseMinutes?: number): Promise<{ ok: true; leaseUntil: string } \| { ok: false; reason: "taken" \| "not-found" }>`, `heartbeat(itemId: string, by: string, leaseMinutes?: number): Promise<{ ok: boolean; leaseUntil?: string }>`, `finish(itemId: string, by: string, outcome: "done" \| "failed", data: { summary: string; branchUrl?: string; version: number }): Promise<Log>` (startedAt = the claim's `claimedAt`), `recordSkip(itemId: string, by: string, reason: string, version: number): Promise<Log>` |
+| `web/lib/work.ts` | F4 | `sortWork(rows)`, `listEligible(opts: { approvedOnly: boolean; limit?: number }): Promise<Array<{ item: TaskItem; task: Task; lastLog: Log \| null }>>` |
+| `web/lib/tokens.ts` | F5 | `createToken(owner: string /* memberId or "team" */, name: string): Promise<{ token: string; row: ApiToken }>`, `verifyBearer(header: string \| null): Promise<Caller \| null>`, `revokeToken(id: string): Promise<void>` |
 
 ---
 
@@ -141,125 +152,99 @@ Notes: `inputs` is the list of blank names (`["url", "branchPrefix"]`); simpler 
 
 ### F0 — Foundation (owner: you)
 
-**Goal:** an empty but deployed app everyone can branch from, with the database created and the shared contracts in place.
+**Goal:** a deployed app everyone can branch from, with the database created and the shared contracts in place.
 
-**Files:**
-- Create: `web/` (Next.js app: `package.json`, `next.config.ts`, `tsconfig.json`, `app/layout.tsx`, `app/page.tsx`)
-- Create: `web/components/ui/*` (shadcn: button, input, textarea, table, dialog, badge, select, toast)
-- Create: `web/components/app-shell.tsx` (sidebar nav: Board, Skills, Targets, Routines, Settings)
-- Create: `web/lib/types.ts`, `web/lib/appwrite.ts`, `web/lib/audit.ts`, `web/lib/auth.ts` (stub)
+**Files (✓ = exists in the mock UI):**
+- ✓ `web/` (Next.js 16.4.2 app), `app/layout.tsx`, `app/page.tsx` (redirects to `/board`)
+- ✓ `web/app/(app)/layout.tsx` (sidebar shell + auth guard + Appwrite ping), `web/app/(app)/loading.tsx`
+- ✓ `web/components/ui.tsx` (Badge, Card, PageHeader, button/input classes), `web/components/client.tsx` (Nav, CopyButton, TokenForm)
+- ✓ `web/lib/appwrite.ts`, `web/lib/auth.ts` (stub), `web/lib/mock.ts` (temporary), `web/.env.example`
+- Update: `web/lib/types.ts` to §3.1 (today it still has the old skills/targets types), `T` in `web/lib/appwrite.ts` to the new table ids
+- Create: `web/lib/audit.ts` (today `logAudit` in `mock.ts`)
 - Create: `web/scripts/setup-appwrite.ts` (idempotent: creates database `commons` and all tables, columns, indexes)
-- Create: `web/.env.example`, `.github/workflows/ci.yml`
-- Create: `web/vitest.config.ts`, `web/lib/__tests__/smoke.test.ts`
+- Create: `.github/workflows/ci.yml`, `web/vitest.config.ts`, `web/lib/__tests__/smoke.test.ts`
 
-- [ ] **Step 1: Create the app.** `npx create-next-app@latest web --ts --app --tailwind --eslint --no-src-dir --import-alias "@/*"`. Then `npx shadcn@latest init` and add the components listed above.
-- [ ] **Step 2: Appwrite project.** In the console on api.rando.ge create project `compute-commons`, an API key with Databases (read/write) and Users (read) scopes, and Email/Password auth enabled. Put values in `web/.env.local` (copy `.env.example`):
+- [x] **Step 1: Create the app.** Done with `create-next-app@16.4.2` (Tailwind 4, ESLint, `@/*` alias). shadcn deferred (see Current state).
+- [ ] **Step 2: Appwrite project.** Project `hakatoni` (`6ad3926b000731cc9576`) exists on api.rando.ge. Still to do: create an API key with Databases (read/write) and Users (read) scopes, and enable Email/Password auth. Put values in `web/.env.local` (copy `.env.example`):
 
 ```
 APPWRITE_ENDPOINT=https://api.rando.ge/v1
-APPWRITE_PROJECT_ID=
+APPWRITE_PROJECT_ID=6ad3926b000731cc9576
 APPWRITE_API_KEY=
 APPWRITE_DATABASE_ID=commons
 TEAM_ID=rando
 SESSION_COOKIE_NAME=commons_session
 ```
 
-- [ ] **Step 3: Pin `node-appwrite`.** Find in the node-appwrite changelog the major that targets server 1.8.x and install that exact major (`npm i node-appwrite@<major>`). Record it in `TECH.md` §2.
-- [ ] **Step 4: `lib/types.ts`** exactly as §3.1.
-- [ ] **Step 5: `lib/appwrite.ts`** with the exports in §3.2. `sessionAccount()` reads the session cookie and returns `null` when absent.
-- [ ] **Step 6: `scripts/setup-appwrite.ts`** creates the tables from `TECH.md` §3 with columns matching §3.1 (strings, integers, booleans, string arrays, datetimes). Indexes: `skills(teamId, slug)` unique, `workItems(skillId, targetId)` unique, `workItems(status)`, `results(workItemId)`, `apiTokens(tokenHash)` unique, `audit(at)`. Running it twice must not fail. Add `"setup:appwrite": "tsx scripts/setup-appwrite.ts"` to `package.json` scripts (`npm i -D tsx`).
-- [ ] **Step 7: `lib/audit.ts`** writes one row to `T.audit` with JSON-stringified `before`/`after`.
-- [ ] **Step 8: `lib/auth.ts` stub:** `getMember()` returns a fake lead when `process.env.AUTH_STUB === "1"`, else `null`. F1 replaces it.
-- [ ] **Step 9: App shell** with nav links and empty pages for each route so other features only fill them in.
+- [x] **Step 3: Pin `node-appwrite`.** Pinned exactly to `22.1.3` (README at that tag: "API version 1.8.1, compatible with server 1.8.x"; 23.x targets 1.9). Recorded in `TECH.md` §2.
+- [ ] **Step 4: `lib/types.ts`** exactly as §3.1 (rework together with the mock UI).
+- [x] **Step 5: `lib/appwrite.ts`** with the exports in §3.2 plus `ping()`. `sessionAccount()` reads the session cookie and returns `null` when absent. Admin calls throw a clear error until `APPWRITE_API_KEY` is set. (Update `T` to the new table ids.)
+- [ ] **Step 6: `scripts/setup-appwrite.ts`** creates the tables from `TECH.md` §3 with columns matching §3.1 (strings, integers, booleans, string arrays, datetimes). Indexes: `taskItems(taskId, item)` unique, `taskItems(status)`, `logs(taskItemId)`, `logs(taskId)`, `apiTokens(tokenHash)` unique, `audit(at)`. Seeds one `settings` row with the default policy and a budget of 5 items / 90 minutes. Running it twice must not fail. Add `"setup:appwrite": "tsx scripts/setup-appwrite.ts"` to `package.json` scripts (`npm i -D tsx`).
+- [ ] **Step 7: `lib/audit.ts`** writes one row to `T.audit` with JSON-stringified `before`/`after` (same signature as `logAudit` in `mock.ts`).
+- [x] **Step 8: `lib/auth.ts` stub:** `getMember()` reads the `mock_member` cookie set by the mock login page and the sidebar "Signed in as" switcher. F1 replaces it and removes the switcher.
+- [x] **Step 9: App shell** with nav and every page built on mock data. Nav after the rework: Board, Tasks, Logs, Connect Claude, Settings.
 - [ ] **Step 10: CI** runs `npm ci`, `npm run lint`, `npx tsc --noEmit`, `npx vitest run` in `web/`.
 - [ ] **Step 11: Deploy** to Vercel (root directory `web`, region close to the Appwrite server, env vars set). Confirm the preview URL loads.
 - [ ] **Step 12: Commit and open PR** `feat/f0-foundation`.
 
-**Acceptance:** preview URL shows the shell; `npm run setup:appwrite` creates all tables on a fresh project and is a no-op the second time; CI is green.
+**Acceptance:** preview URL shows the shell with "Appwrite: connected"; `npm run setup:appwrite` creates all tables on a fresh project and is a no-op the second time; CI is green.
 
 ### F1 — Auth & members
 
 **Depends on:** F0.
-**Files:** `web/app/(auth)/login/page.tsx`, `web/app/(auth)/login/actions.ts`, `web/lib/auth.ts` (replace stub), `web/proxy.ts` (Next.js 16 renamed `middleware.ts` to `proxy.ts`; check the Next.js docs for the version you install), `web/app/settings/members/*`.
+**Files:** `web/app/(auth)/login/page.tsx`, `web/app/(auth)/login/actions.ts`, `web/lib/auth.ts` (replace stub), `web/proxy.ts` (Next.js 16 renamed `middleware.ts` to `proxy.ts`; check the bundled docs in `node_modules/next/dist/docs`), `web/app/(app)/settings/members/*`.
 
 - Login with email + password via a server action: `account.createEmailPasswordSession` with the admin client, store the session secret in an httpOnly, secure, sameSite=lax cookie (`SESSION_COOKIE_NAME`). Logout deletes the session and cookie.
 - `proxy.ts` redirects to `/login` when the cookie is missing (except `/login` and `/api/mcp`).
 - `getMember()` resolves the Appwrite user from the session, then the `members` row for `TEAM_ID`. A user without a members row sees "Ask your lead to add you".
 - Members page (lead only): invite by email (creates the Appwrite user with a temporary password shown once, or an Appwrite invite), change role, remove. Each change calls `audit()`.
 - First user bootstrap: `setup-appwrite.ts --first-lead you@example.com` creates the first lead.
+- Remove the mock "Signed in as" switcher.
 
 **Acceptance:** a member cannot open `/settings/members` (403 page); a lead can add a member who can then log in; role change appears in the audit table.
 
-### F2 — Skills library
+### F2 — Tasks
 
 **Depends on:** F0 (uses `requireLead`, stubbed until F1).
-**Files:** `web/app/skills/page.tsx`, `web/app/skills/[id]/page.tsx`, `web/app/skills/actions.ts`, `web/lib/skills.ts`, `web/lib/__tests__/skills.test.ts`.
+**Files:** `web/app/(app)/tasks/page.tsx`, `web/app/(app)/tasks/[id]/page.tsx`, `web/app/(app)/tasks/actions.ts`, `web/lib/tasks.ts`, `web/lib/__tests__/tasks.test.ts`.
 
-- List: title, slug, description, current and approved version, risk label of current version.
-- Editor (lead): title, description, `requires` (comma list), risk label, prompt (textarea, markdown), inputs auto-detected from `{{name}}` in the prompt (use `fillBlanks(prompt, {}).missing` from F4, or a regex `/\{\{\s*([\w.-]+)\s*\}\}/g` until F4 lands).
-- Save = create a new `skill_versions` row with `version = currentVersion + 1` and update `currentVersion`. Versions are never edited.
-- Approve (lead): sets `approvedVersion`. Version history page shows each version with a diff against the previous one (plain line diff is enough).
-- Members can read everything and see a "suggest change" note (free text stored in audit as `skill.suggest`); no editing.
-- `lib/skills.ts` exports `nextVersion(current: number): number` and `detectInputs(prompt: string): string[]`. Test:
+- **List:** title, one-off/routine (with "every N days"), number of items and how many are done, current and approved version, risk label.
+- **Editor (lead):** title, description, prompt (textarea, markdown), mode (one-off / routine + redo after N days), item list (textarea, one per line, optional), `requires` (comma list), risk label, priority.
+- **Save** = a new `task_versions` row with `version = currentVersion + 1`, update the task, and `ensureItems` for the item list (a task with no list gets one item `""`). Versions are never edited. Removing a line from the list does not delete its item or its logs (it stops being offered; see §6).
+- **Approve (lead):** sets `approvedVersion`. Version history shows each version with a plain line diff against the previous one. Schedules only take approved tasks.
+- **Preview:** pick one item and see the full prompt Claude will get (`buildPrompt` from F3: team policy + task prompt with `{{item}}` filled).
+- **Members** can read everything and leave a "suggest change" note (stored in audit as `task.suggest`); no editing.
+- `lib/tasks.ts` exports `nextVersion` and `parseItems` (trim, drop blank lines, drop duplicates, keep order). Test:
 
 ```ts
 import { describe, it, expect } from "vitest";
-import { detectInputs, nextVersion } from "../skills";
+import { nextVersion, parseItems } from "../tasks";
 
-describe("skills", () => {
-  it("detects unique blanks in order", () => {
-    expect(detectInputs("Audit {{ url }} on {{branch}} then {{url}}")).toEqual(["url", "branch"]);
-  });
+describe("tasks", () => {
   it("increments versions from 0", () => {
     expect(nextVersion(0)).toBe(1);
     expect(nextVersion(4)).toBe(5);
   });
-});
-```
-
-**Acceptance:** editing a skill creates version N+1 and leaves N unchanged; only a lead can approve; audit rows exist for create, edit, approve.
-
-### F3 — Targets
-
-**Depends on:** F0.
-**Files:** `web/app/targets/page.tsx`, `web/app/targets/actions.ts`, `web/lib/targets.ts`, `web/lib/__tests__/targets.test.ts`.
-
-- Table of targets with kind, name, ref, tags; filter by kind and tag.
-- Add one target (kind is free text with suggestions from existing kinds).
-- Paste a list: one target per line as `name | ref | tag1, tag2` (kind chosen once for the batch). Show a preview before saving; skip duplicates by `ref`.
-- `lib/targets.ts` exports `parseTargetLines(text: string): Array<{ name: string; ref: string; tags: string[] }>`. Test:
-
-```ts
-import { describe, it, expect } from "vitest";
-import { parseTargetLines } from "../targets";
-
-describe("parseTargetLines", () => {
-  it("parses name, ref and tags, ignoring blank lines", () => {
-    expect(parseTargetLines("Site A | https://a.ge | seo, client\n\nRepo B | github.com/x/b |")).toEqual([
-      { name: "Site A", ref: "https://a.ge", tags: ["seo", "client"] },
-      { name: "Repo B", ref: "github.com/x/b", tags: [] },
-    ]);
-  });
-  it("uses ref as name when name is missing", () => {
-    expect(parseTargetLines("| https://c.ge |")).toEqual([{ name: "https://c.ge", ref: "https://c.ge", tags: [] }]);
+  it("parses an item list: trims, skips blanks and duplicates", () => {
+    expect(parseItems(" https://a.ge \n\nhttps://b.ge\nhttps://a.ge")).toEqual(["https://a.ge", "https://b.ge"]);
   });
 });
 ```
 
-**Acceptance:** pasting 20 lines creates 20 targets; pasting them again creates 0.
+**Acceptance:** editing a task creates version N+1 and leaves N unchanged; saving a task with 5 items twice creates 5 task items; only a lead can approve; audit rows exist for create, edit, approve.
 
-### F4 — Prompt builder + team policy
+### F3 — Prompt builder + team policy
 
 **Depends on:** F0 types.
-**Files:** `web/lib/prompt.ts`, `web/lib/__tests__/prompt.test.ts`, `web/app/settings/policy/page.tsx`, `web/app/settings/policy/actions.ts`.
+**Files:** `web/lib/prompt.ts`, `web/lib/__tests__/prompt.test.ts`, `web/app/(app)/settings/policy/page.tsx`, `web/app/(app)/settings/policy/actions.ts`.
 
 - `fillBlanks` replaces `{{ name }}` (spaces allowed) with values; unknown blanks stay as-is and are listed in `missing`.
-- `buildPrompt` joins non-empty parts in the fixed order with a separator line, then fills blanks once over the whole text.
-- Team policy page (lead): edit the single `team` policy prefix, including the client's branching strategy. The default below uses a branch per task; the lead replaces that line with the client's choice (per run, per target, one shared branch, or their own convention). Default text:
+- `buildPrompt` joins the non-empty team policy and task prompt with a separator line, then fills blanks once over the whole text. Values in v1: `{ item }`.
+- Settings page (lead): edit the team policy, including the client's branching strategy (D15), and the per-run budget (`maxItemsPerRun`, `maxMinutesPerRun`) that `list_work` returns to schedules. Default policy:
 
 ```
 Rules for every task:
-- Work in a fresh clone. Branching: a new branch per task named commons/<skill>-<target>-<date>. Never push to main.
+- Work in a fresh clone. Branching: a new branch per task named commons/<task>-<date>. Never push to main.
 - Use no secrets and do not read files outside the working folder.
 - Finish by calling complete (summary + branch URL) or fail (reason).
 ```
@@ -272,122 +257,144 @@ import { fillBlanks, buildPrompt } from "../prompt";
 
 describe("prompt", () => {
   it("fills known blanks and reports missing ones", () => {
-    expect(fillBlanks("Audit {{ url }} for {{goal}}", { url: "https://a.ge" }))
+    expect(fillBlanks("Audit {{ item }} for {{goal}}", { item: "https://a.ge" }))
       .toEqual({ text: "Audit https://a.ge for {{goal}}", missing: ["goal"] });
   });
-  it("orders policy, prefix, skill and skips empty parts", () => {
-    const r = buildPrompt({ teamPolicy: "P", routinePrefix: "", skillPrompt: "S {{x}}", values: { x: "1" } });
-    expect(r.text).toBe("P\n\n---\n\nS 1");
-    expect(r.missing).toEqual([]);
+  it("puts the policy first and skips an empty policy", () => {
+    expect(buildPrompt({ teamPolicy: "P", taskPrompt: "S {{item}}", values: { item: "1" } }).text).toBe("P\n\n---\n\nS 1");
+    expect(buildPrompt({ teamPolicy: "", taskPrompt: "S", values: {} }).text).toBe("S");
   });
 });
 ```
 
-**Acceptance:** tests pass; the policy page saves and audits the change.
+**Acceptance:** tests pass; the settings page saves policy and budget and audits the change.
 
-### F5 — Claim engine
+### F4 — Claim engine + work queue
 
 **Depends on:** F0 types and schema.
-**Files:** `web/lib/claims.ts`, `web/lib/__tests__/claims.test.ts`, `web/scripts/race-test.ts`.
+**Files:** `web/lib/claims.ts`, `web/lib/work.ts`, `web/lib/__tests__/claims.test.ts`, `web/lib/__tests__/work.test.ts`, `web/scripts/race-test.ts`.
+
+This is what prevents double work.
 
 - `isEligible` is pure:
   - an active claim (`leaseUntil` later than now) → not eligible;
-  - status `done` with `cooldownDays = 0` → not eligible (done once, until a lead resets it);
-  - status `done` with `cooldownDays > 0` → eligible only when `lastDoneAt` is older than `cooldownDays`;
+  - status `done` with `redoDays = 0` (one-off) → not eligible (done once, until a lead resets it);
+  - status `done` with `redoDays > 0` (routine) → eligible only when `lastDoneAt` is older than `redoDays`;
   - status `available`, `failed` or `skipped` → eligible.
-- `claim`: `createRow(T.claims, workItemId, {...})`. On HTTP 409, read the claim; if expired, delete and create **in one Appwrite transaction**; otherwise return `{ ok: false, reason: "taken" }`. Default lease 120 minutes.
+- `claim`: `createRow(T.claims, itemId, {...})`. On HTTP 409, read the claim; if expired, delete and create **in one Appwrite transaction**; otherwise return `{ ok: false, reason: "taken" }`. Default lease 120 minutes.
 - `heartbeat`: only the current holder (`by`) can extend.
-- `finish`: in one transaction, create the `results` row (startedAt = claim's `claimedAt`), update the work item (`status`, and `lastDoneAt` when done), delete the claim. Only the holder can finish.
-- `recordSkip`: creates a `skipped` result and sets the item status to `skipped`. No claim needed; an active claim by someone else makes it fail with "taken".
-- `scripts/race-test.ts`: fires 10 concurrent `claim()` calls on one work item against the real server and asserts exactly one `ok: true`; then sets an expired lease and fires 5 concurrent takeovers and asserts exactly one wins. Run manually: `npx tsx scripts/race-test.ts`.
+- `finish`: in one transaction, create the `logs` row (startedAt = claim's `claimedAt`), update the task item (`status`, and `lastDoneAt` when done), delete the claim. Only the holder can finish.
+- `recordSkip`: creates a `skipped` log and sets the item status to `skipped`. No claim needed; an active claim by someone else makes it fail with "taken".
+- `listEligible` loads task items (only tasks with an approved version when `approvedOnly`), their claims, filters with `isEligible` using the task's `redoDays`, orders with `sortWork` (task priority desc, then `lastDoneAt` asc, never-done first) and returns at most `limit` (default 10) with the task and last log.
+- `scripts/race-test.ts`: fires 10 concurrent `claim()` calls on one item against the real server and asserts exactly one `ok: true`; then sets an expired lease and fires 5 concurrent takeovers and asserts exactly one wins. Run manually: `npx tsx scripts/race-test.ts`.
 
-Unit test for the pure part:
+Tests for the pure parts:
 
 ```ts
 import { describe, it, expect } from "vitest";
 import { isEligible } from "../claims";
-import type { WorkItem, Claim } from "../types";
+import type { TaskItem, Claim } from "../types";
 
-const item = (o: Partial<WorkItem> = {}): WorkItem => ({
-  $id: "w1", teamId: "t", skillId: "s", targetId: "x", status: "available",
-  lastDoneAt: null, lastResultId: null, priority: 0, ...o,
+const item = (o: Partial<TaskItem> = {}): TaskItem => ({
+  $id: "i1", teamId: "t", taskId: "k1", item: "https://a.ge", status: "available",
+  lastDoneAt: null, lastLogId: null, ...o,
 });
 const now = new Date("2026-10-20T12:00:00Z");
 
 describe("isEligible", () => {
   it("free item is eligible", () => expect(isEligible(item(), null, now, 0)).toBe(true));
   it("active claim blocks", () => {
-    const c: Claim = { $id: "w1", by: "m1", claimedAt: "2026-10-20T11:00:00Z", leaseUntil: "2026-10-20T13:00:00Z" };
+    const c: Claim = { $id: "i1", by: "m1", claimedAt: "2026-10-20T11:00:00Z", leaseUntil: "2026-10-20T13:00:00Z" };
     expect(isEligible(item(), c, now, 0)).toBe(false);
   });
   it("expired claim does not block", () => {
-    const c: Claim = { $id: "w1", by: "m1", claimedAt: "2026-10-20T08:00:00Z", leaseUntil: "2026-10-20T10:00:00Z" };
+    const c: Claim = { $id: "i1", by: "m1", claimedAt: "2026-10-20T08:00:00Z", leaseUntil: "2026-10-20T10:00:00Z" };
     expect(isEligible(item(), c, now, 0)).toBe(true);
   });
-  it("cooldown 0 means done once", () => {
+  it("one-off is done once", () => {
     expect(isEligible(item({ status: "done", lastDoneAt: "2026-01-01T00:00:00Z" }), null, now, 0)).toBe(false);
   });
   it("failed items can be retried", () => expect(isEligible(item({ status: "failed" }), null, now, 0)).toBe(true));
-  it("cooldown blocks recent success", () => {
+  it("routine comes back after redoDays", () => {
     expect(isEligible(item({ status: "done", lastDoneAt: "2026-10-18T12:00:00Z" }), null, now, 7)).toBe(false);
     expect(isEligible(item({ status: "done", lastDoneAt: "2026-10-01T12:00:00Z" }), null, now, 7)).toBe(true);
   });
 });
 ```
 
-**Acceptance:** unit tests pass; the race test shows exactly one winner in both scenarios on our 1.8.1 server. If the transaction does not prevent a double takeover, stop and tell the team (fallback: a version column checked on update).
-
-### F6 — Work items
-
-**Depends on:** F2, F3, F5.
-**Files:** `web/lib/work.ts`, `web/lib/__tests__/work.test.ts`, `web/app/skills/[id]/targets/page.tsx`.
-
-- On a skill's page, "Assign targets": pick targets by tag or individually; `ensureWorkItems` creates missing skill × target rows (the unique index makes repeats harmless).
-- `listEligible` loads work items for the routine's skill and targets (or for a skill), loads their claims, filters with `isEligible`, sorts by priority desc then `lastDoneAt` asc (never-done first), returns at most `limit` (default 10) with skill, target and last result.
-- Test the sort order as a pure function `sortWork(rows)` exported from `work.ts`:
-
 ```ts
-import { describe, it, expect } from "vitest";
+import { it, expect } from "vitest";
 import { sortWork } from "../work";
 
-it("sorts by priority then oldest done, never-done first", () => {
+it("sorts by task priority then oldest done, never-done first", () => {
   const rows = [
-    { item: { $id: "a", priority: 0, lastDoneAt: "2026-10-10T00:00:00Z" } },
-    { item: { $id: "b", priority: 0, lastDoneAt: null } },
-    { item: { $id: "c", priority: 5, lastDoneAt: "2026-10-15T00:00:00Z" } },
+    { task: { priority: 0 }, item: { $id: "a", lastDoneAt: "2026-10-10T00:00:00Z" } },
+    { task: { priority: 0 }, item: { $id: "b", lastDoneAt: null } },
+    { task: { priority: 5 }, item: { $id: "c", lastDoneAt: "2026-10-15T00:00:00Z" } },
   ] as any;
   expect(sortWork(rows).map((r: any) => r.item.$id)).toEqual(["c", "b", "a"]);
 });
 ```
 
-**Acceptance:** assigning 5 targets twice creates 5 work items; `listEligible` hides a claimed item until its lease expires.
+**Acceptance:** unit tests pass; the race test shows exactly one winner in both scenarios on our 1.8.1 server. If the transaction does not prevent a double takeover, stop and tell the team (fallback: a version column checked on update).
 
-### F7 — MCP endpoint + API tokens
+### F5 — MCP endpoint + tokens + Connect Claude
 
-**Depends on:** F1, F4, F5, F6.
-**Files:** `web/app/api/[transport]/route.ts`, `web/lib/tokens.ts`, `web/lib/mcp/tools.ts`, `web/lib/__tests__/tokens.test.ts`, `web/app/settings/tokens/*`.
+**Depends on:** F1, F2, F3, F4.
+**Files:** `web/app/api/[transport]/route.ts`, `web/lib/tokens.ts`, `web/lib/mcp/tools.ts`, `web/lib/mcp/instructions.ts`, `web/lib/__tests__/tokens.test.ts`, `web/lib/__tests__/instructions.test.ts`, `web/app/(app)/setup/page.tsx`, `web/app/(app)/settings/tokens/*`.
 
-- Tokens page: create (show the token once, plus the ready `claude mcp add --transport http commons https://<app>/api/mcp --header "Authorization: Bearer <token>"` command), list, revoke. Routine tokens belong to a routine (`memberId` = `routine:<id>`), created on the routine page (F9).
+- **Connect Claude page (`/setup`)**, the one-time setup, in four steps:
+  1. Create a token (shown once). Owner: yourself (your own Claude Code) or the team (`team`, lead only, for Claude schedules).
+  2. Guide to add the `commons` connector in Claude: the URL `https://<app>/api/mcp` and the `Authorization: Bearer <token>` request header. For Claude Code on a laptop, show `claude mcp add --transport http commons https://<app>/api/mcp --header "Authorization: Bearer <token>"`.
+  3. "Copy prompt" for the Claude scheduled task: the one line `SETUP_PROMPT`.
+  4. "Check it works": run the schedule once by hand and watch the board.
+- Tokens page (`/settings/tokens`): list and revoke.
 - `tokens.ts`: tokens are 32 random bytes, base64url, prefixed `cc_`. Store `sha256` hex. `verifyBearer` returns a `Caller` or `null`, updates `lastUsedAt`.
-- Route: `mcp-handler` with stateless Streamable HTTP. Every request without a valid token gets `401`. Tools (inputs with zod):
+- `mcp/instructions.ts` exports `MCP_INSTRUCTIONS` (the workflow, sent as the MCP server's `instructions` in the initialize response) and `SETUP_PROMPT` (the one line pasted into Claude). The workflow lives only here, never in the pasted prompt:
+
+```ts
+export const MCP_INSTRUCTIONS = [
+  "This server hands out team tasks. To work on them:",
+  "1. Call list_work. It returns the items you may take and this run's budget.",
+  "2. Take items in the order given. Call claim; if it is taken, move to the next one.",
+  "3. Call get_task for the claimed item and follow the instructions it returns exactly, including the branching strategy. Never push to main.",
+  "4. On long items, call heartbeat at least every 30 minutes.",
+  "5. Finish each item with complete (summary + branch URL), fail (reason), or skip (reason).",
+  "6. Stop when list_work is empty or the budget is used up.",
+].join("\n");
+
+export const SETUP_PROMPT = `Use the "commons" MCP connector and work through our team's task queue.`;
+```
+
+```ts
+import { it, expect } from "vitest";
+import { SETUP_PROMPT, MCP_INSTRUCTIONS } from "../mcp/instructions";
+
+it("keeps the pasted prompt to one line and the workflow on the server", () => {
+  expect(SETUP_PROMPT.split("\n")).toHaveLength(1);
+  expect(MCP_INSTRUCTIONS).toContain("claim");
+});
+```
+
+- Route: `mcp-handler` with stateless Streamable HTTP and `instructions: MCP_INSTRUCTIONS`. Every request without a valid token gets `401`. Tools (inputs with zod):
 
 | Tool | Input | Returns |
 |---|---|---|
-| `list_work` | `{ routineId?: string, skill?: string, limit?: number }` | eligible items: id, skill slug, target name/ref, last result, suggested order |
-| `get_skill` | `{ workItemId: string }` | merged prompt via `buildPrompt` (approved version for routines, current for members), `requires`, `riskLabel`, version |
-| `claim` | `{ workItemId: string }` | `{ ok, leaseUntil }` or `{ ok: false, reason }` |
-| `heartbeat` | `{ workItemId: string }` | `{ ok, leaseUntil }` |
-| `complete` | `{ workItemId: string, summary: string, branchUrl: string }` | result id (via `finish(..., "done", ...)`) |
-| `fail` | `{ workItemId: string, reason: string }` | result id (via `finish(..., "failed", ...)`) |
-| `skip` | `{ workItemId: string, reason: string }` | result id (via `recordSkip`, claim not required) |
-| `board` | `{ skill?: string }` | counts and current claims |
+| `list_work` | `{ limit?: number }` | eligible items: item id, task title, item text, last log, suggested order; plus `budget: { maxItems, maxMinutes }` from settings |
+| `get_task` | `{ itemId: string }` | merged prompt via `buildPrompt` (approved version for `team` callers, current for members), `missing`, `requires`, `riskLabel`, version |
+| `claim` | `{ itemId: string }` | `{ ok, leaseUntil }` or `{ ok: false, reason }` |
+| `heartbeat` | `{ itemId: string }` | `{ ok, leaseUntil }` |
+| `complete` | `{ itemId: string, summary: string, branchUrl: string }` | log id (via `finish(..., "done", ...)`) |
+| `fail` | `{ itemId: string, reason: string }` | log id (via `finish(..., "failed", ...)`) |
+| `skip` | `{ itemId: string, reason: string }` | log id (via `recordSkip`, claim not required) |
+| `board` | `{}` | counts and current claims |
 
-- `get_skill` fills blanks from the target: `{ target: target.name, ref: target.ref, kind: target.kind, tags: target.tags.join(", ") }`, and returns `missing` so the AI (or the lead, when previewing) sees unfilled blanks. Skill authors should only use these blanks in v1.
-- A routine caller can only see work for its own routine. A skill with no approved version is invisible to routines.
+- `team` callers (schedules) only see tasks with an approved version (`listEligible({ approvedOnly: true })`). Members also see unapproved tasks, running the current version.
+- Budget: the AI stops itself using the `budget` from `list_work`. Optional hard stop (see §6): `claim` refuses once a caller has claimed `maxItems` items within the last `maxMinutes`.
 - Test `tokens.ts` hashing and prefix:
 
 ```ts
-import { describe, it, expect } from "vitest";
+import { it, expect } from "vitest";
 import { hashToken, newTokenString } from "../tokens";
 
 it("creates prefixed tokens and stable hashes", () => {
@@ -398,83 +405,49 @@ it("creates prefixed tokens and stable hashes", () => {
 });
 ```
 
-**Acceptance:** with MCP Inspector and with `claude mcp add` from a laptop: no token → 401; a member token can list, claim, complete; a second claim on the same item returns "taken"; results show on the board.
+**Acceptance:** with MCP Inspector and with `claude mcp add` from a laptop: no token → 401; the initialize response carries `MCP_INSTRUCTIONS`; a member token can list, claim, complete; a second claim on the same item returns "taken"; logs show on the board; following `/setup` alone is enough to connect a Claude scheduled task.
 
-### F8 — Board
+### F6 — Board + logs
 
-**Depends on:** F5, F6.
-**Files:** `web/app/board/page.tsx`, `web/app/board/components/*`.
+**Depends on:** F2, F4.
+**Files:** `web/app/(app)/board/page.tsx`, `web/app/(app)/board/components/*`, `web/app/(app)/logs/page.tsx`.
 
-- Group by skill. Each row: target, status badge (free / claimed by X until HH:MM / done on date / failed / skipped), last result summary, branch link.
-- Filters: skill, status, kind, tag. Refresh button (realtime is a later feature).
-- Lead actions: release a stuck claim (deletes the claim, audited), reset an item to available.
+- **Board:** grouped by task. Each row is one item: item text (or the task title when there is no list), status badge (free / claimed by X until HH:MM / done on date / failed / skipped), last log summary, branch link. Filters: task, status. Refresh button (realtime is a later feature).
+- **Quick add (lead):** a one-line "Add task" bar (title + prompt) for a one-off job without opening the editor.
+- **Lead actions:** release a stuck claim (deletes the claim, audited), reset an item to available.
+- **Logs page:** every log, newest first: who, when, task, item, outcome, summary, branch link. Filter by task and by person. The task page (F2) shows the same list for one task.
+- Remove the mock-only Claim / Complete / Fail / Skip buttons once F5 lands; real claims come from Claude through MCP.
 
-**Acceptance:** a claim made through MCP shows within one refresh; releasing it frees the item.
+**Acceptance:** a claim made through MCP shows within one refresh; releasing it frees the item; a completed item's log appears on the Logs page with its branch link.
 
-### F9 — Routines
-
-**Depends on:** F2, F3, F4, F6.
-**Files:** `web/app/routines/page.tsx`, `web/app/routines/[id]/page.tsx`, `web/app/routines/actions.ts`, `web/lib/routine-prompt.ts`, `web/lib/__tests__/routine-prompt.test.ts`.
-
-- Lead creates a routine: name, skill, targets (by tags and/or ids), routine prefix (a `routine` policy), budget (max items, max minutes), cooldown days, enabled.
-- Saving runs `ensureWorkItems` for the chosen targets.
-- "Create routine token" (F7 `createToken` with `routine:<id>`).
-- "Copy routine prompt" produces the text to paste into Claude's routine setup. `routine-prompt.ts` exports `routinePrompt(r: Routine): string`:
-
-```ts
-export function routinePrompt(r: { $id: string; name: string; maxItems: number; maxMinutes: number }): string {
-  return [
-    `You are running the "${r.name}" routine for our team. Use the "commons" MCP connector.`,
-    `1. Call list_work with routineId "${r.$id}".`,
-    `2. Take the first item: call claim, then get_skill, and follow the returned instructions exactly.`,
-    `3. Call heartbeat at least every 30 minutes on long items.`,
-    `4. Finish each item with complete (summary + branch URL) or fail (reason). If an item should not be done, call skip with a reason.`,
-    `5. Stop after ${r.maxItems} items or ${r.maxMinutes} minutes, or when list_work is empty.`,
-  ].join("\n");
-}
-```
-
-Test:
-
-```ts
-import { it, expect } from "vitest";
-import { routinePrompt } from "../routine-prompt";
-
-it("includes routine id and budget", () => {
-  const p = routinePrompt({ $id: "r1", name: "Nightly audit", maxItems: 5, maxMinutes: 90 });
-  expect(p).toContain('routineId "r1"');
-  expect(p).toContain("Stop after 5 items or 90 minutes");
-});
-```
-
-**Acceptance:** creating a routine for 5 targets makes 5 work items; the copied prompt and token are enough to set up a Claude routine.
-
-### F10 — Demo: one real routine end to end
+### F7 — Demo: one real schedule end to end
 
 **Depends on:** all.
 
-- [ ] Add a real skill (for example the Rando SEO audit) and approve it. Check its `requires` against what a routine's cloud workspace has.
-- [ ] Register 3–5 real targets.
-- [ ] Create the routine, its token, and set up the Claude routine with our connector (request headers if available, see `TECH.md` §6; otherwise the agreed fallback).
-- [ ] Trigger a run, watch the board, open the result branches.
-- [ ] Run a teammate's on-demand session at the same time to show no double work.
+- [ ] Write a real task (for example the Rando SEO audit, or adding a skill to every site) with an item list of 3–5 entries, and approve it. Check its `requires` against what a Claude schedule's cloud workspace has.
+- [ ] Follow `/setup`: team token, connector (request headers if available, see `TECH.md` §6; otherwise the agreed fallback), and the one-line prompt in a Claude scheduled task.
+- [ ] Trigger a run, watch the board, open the result branches and the logs.
+- [ ] Run a teammate's own Claude Code session at the same time to show no double work.
 - [ ] Record the demo and note anything that broke as issues.
 
-**Acceptance:** at least 3 targets done by the routine with branches linked on the board, and one collision prevented on camera.
+**Acceptance:** at least 3 items done by the schedule with branches linked in the logs, and one collision prevented on camera.
 
 ---
 
 ## 5. Later (not in this plan)
 
-GitHub sign-in (Appwrite OAuth) · OAuth for the MCP endpoint (Better Auth MCP plugin or Clerk) if request headers are unavailable · CodeMirror skill editor · realtime board · spare-limit planner · multiple teams · shared template library between teams · clan mode (`POSITIONING.md`, `security/SECURITY.md`).
+GitHub sign-in (Appwrite OAuth) · OAuth for the MCP endpoint (Better Auth MCP plugin or Clerk) if request headers are unavailable · CodeMirror prompt editor · realtime board · more blanks than `{{item}}` · restricting a schedule to some tasks (tags) · spare-limit planner · multiple teams · shared task library between teams · clan mode (`POSITIONING.md`, `security/SECURITY.md`).
 
 ## 6. Open questions that affect features
 
 | Question | Affects | Default until decided |
 |---|---|---|
-| Does our claude.ai organization have connector request headers? | F7, F10 | Build header auth; decide the fallback before F10. |
-| Is a skill done once per target or repeatedly? | F5 cooldown, F9 | Per-routine `cooldownDays` (0 = done once until a lead resets it). `listEligible` passes the routine's value; for on-demand calls without a routine, use 0. |
-| Who may write skills: lead only or members too? | F2 | Lead edits, members suggest. |
-| Results only as branches, or also comments/report pages? | F7 `complete` | Branch URL + summary. |
-| Which branching strategies do we offer, and where is the choice set? | F4 policy, F9 routines | Free text in the team policy prefix (default: branch per task); a routine prefix may override it. No dedicated field in v1. |
-| How long is a lease? | F5 | 120 minutes, routine prompt heartbeats every 30. |
+| Does our claude.ai organization have connector request headers? | F5, F7 | Build header auth; decide the fallback before F7. |
+| Should a schedule take every approved task, or only some (e.g. only routine tasks, or a tag)? | F4, F5 | Every approved task. Add a tag filter later if two schedules need different work. |
+| Who may write tasks: lead only or members too? | F2 | Lead edits, members suggest. |
+| Results only as branches, or also comments/report pages? | F5 `complete` | Branch URL + summary in the log. |
+| Which branching strategies do we offer, and where is the choice set? | F3 settings | Free text in the team policy (default: branch per task). No dedicated field in v1. |
+| How long is a lease? | F4 | 120 minutes; `MCP_INSTRUCTIONS` tell Claude to heartbeat every 30. |
+| What happens to an item removed from a task's list? | F2 | Kept with its logs but no longer offered (mark it `skipped` with reason "removed from list"). |
+| Exact steps to add a custom connector with request headers in Claude (menu path, where headers go). | F5 `/setup` guide, F7 | Guide says "Settings → Connectors"; verify against Claude's docs and our organization before F7. |
+| Should the server enforce the budget, or trust the AI to stop? | F5 `claim` | AI stops using `list_work.budget`; add the hard stop in `claim` if a run ever overspends. |
