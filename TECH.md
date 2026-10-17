@@ -26,7 +26,7 @@ One Next.js project holds the web app, the API and the MCP endpoint. Appwrite is
 |---|---|---|---|
 | Framework | Next.js (App Router) + TypeScript | `next` 16.4.2, `react` 19.3.1 | Web app, server actions and the MCP route in one deployment. Same as Rando. |
 | Database + auth | Appwrite **TablesDB**, self-hosted | server **1.8.1** (checked on api.rando.ge) | Already running. 1.8 has TablesDB and a Transactions API, which the claim logic needs. |
-| Appwrite SDK (server) | `node-appwrite` | **pinned 22.1.3** (latest is 30.0.1) | 22.1.3 is the last release built for API 1.8.1 (README at that tag); 23.x targets 1.9. All data access happens on the server with an API key. |
+| Appwrite SDK (server) | `node-appwrite` | **pinned 22.1.3** (latest is 30.0.1) | 22.1.3 is the last release built for API 1.8.1 (README at that tag); 23.x targets 1.9. All data access happens on the server with an API key. Its `createVarcharColumn`/`createTextColumn` routes do **not** exist on 1.8.1: the schema script uses `createStringColumn` (size > 16,381 makes a TEXT column; smaller ones are VARCHAR and count 4 bytes per char against the 64 KB row limit). |
 | Appwrite SDK (browser) | not needed at first | (`appwrite` 29.0.0) | Login runs through server actions with an httpOnly session cookie (Appwrite's SSR pattern). Add the browser SDK only if we need realtime. |
 | MCP server | `mcp-handler` + `@modelcontextprotocol/server` | 2.3.0 + 2.3.1 | Vercel's adapter for MCP in Next.js routes. Supports Streamable HTTP and auth helpers (`withMcpAuth`, protected-resource metadata) for when we add OAuth. |
 | Validation | `zod` | 4.6.7 | Tool input schemas for MCP and form validation, one library for both. |
@@ -54,6 +54,7 @@ One database, `commons`. v1 serves one team, and every row carries `teamId` so m
 | `member_notes` | `taskId`, `memberId`, `text`, `updatedAt` | A member's own addition to a task's prompt (e.g. where their files are). Only that member's Claude receives it (D24). Unique per task + member. |
 | `task_items` | `teamId`, `taskId`, `text` (one row of the task's table, `""` when the task has no rows), `position`, `status` (`available` \| `done` \| `failed` \| `skipped`), `lastDoneAt`, `lastLogId` | The unit of work and of claiming (D23). One per row; a task without rows has one hidden item. |
 | `claims` | **row id = task item id**, `by` (member id), `scheduled`, `claimedAt`, `leaseUntil` | The lock. See §4. |
+| `claim_takeovers` | **row id = hash(item id + expired claim's `claimedAt`)**, `itemId` | Lock for taking over an expired claim. Never deleted. See §4. |
 | `logs` | `taskId`, `itemId`, `item` (row text copied at the time), `by` (member id), `scheduled`, `outcome` (`done` \| `failed` \| `skipped`), `summary`, `details` (free text: what was done, where the result is), `version`, `startedAt`, `finishedAt` | Who did what, when, on which row. Board and Logs page data. |
 | `settings` | `teamId`, `policy` (markdown) | One row. The policy goes before every task prompt (rules such as how to deliver results; for code teams, the branching strategy, D15). |
 | `api_tokens` | `owner` (member id), `scheduled` (made for a Claude schedule), `name`, `tokenHash`, `lastUsedAt`, `revoked` | MCP access (§6). Store the hash only. |
@@ -66,7 +67,9 @@ Permissions: the browser never talks to Appwrite directly in v1. Server code use
 The one tricky part is two people (or a person and a schedule) taking the same task item at the same moment.
 
 - **Claim = create a row in `claims` whose row id is the task item id.** Appwrite rejects a second create with the same id (HTTP 409), so only one claimer can win. This is atomic without any read-then-write.
-- **Expired leases:** if the create fails, read the existing claim. If `leaseUntil` is in the past, delete it and create ours **inside one Appwrite transaction**. If two claimers race for the same stale claim, the transaction's conflict detection should let only one commit. This needs a quick test against our 1.8.1 server before we rely on it.
+- **Expired leases:** if the create fails, read the existing claim. If `leaseUntil` is in the past, create a `claim_takeovers` row whose id is a hash of the item id and the expired claim's `claimedAt`; only the claimer whose create succeeds overwrites the claim, the others get "taken". Markers are never deleted, so a claimer acting on a stale read cannot win later. **Tested on 1.8.1:** delete + create inside one Appwrite transaction let two takeovers win in one of three runs, so transactions are not used as a lock (`scripts/race-test.ts`).
+- **After winning the lock, the item is read again:** if it was finished in between, the claim is released and the answer is "done".
+- `finish` still writes log + item status + claim delete in one transaction: that is all-or-nothing, not a lock.
 - **Heartbeat:** long runs call `heartbeat` to push `leaseUntil` forward (default lease 2 hours, a setting).
 - **Finish:** `complete`, `fail` or `skip` writes a `logs` row, updates the `task_items` status, and deletes the claim, in one transaction.
 - **Eligibility** (decided by the server, not the AI): not claimed (or lease expired), not done (one-off) or past `lastDoneAt + repeatDays` (routine), the caller is assigned (or the task has no assignees).

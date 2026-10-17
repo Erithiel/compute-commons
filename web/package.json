@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "setup:appwrite": "tsx --env-file=.env.local scripts/setup-appwrite.ts",
+    "test": "vitest run",
+    "race-test": "tsx --env-file=.env.local --conditions=react-server scripts/race-test.ts"
   },
   "dependencies": {
     "next": "16.4.2",
@@ -23,6 +26,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.20.6",
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

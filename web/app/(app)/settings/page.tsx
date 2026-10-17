@@ -1,7 +1,7 @@
 import { requireMember } from "@/lib/auth";
 import { db, who } from "@/lib/mock";
 import { addMember, removeMember, revokeToken, saveSettings, setRole } from "@/app/actions";
-import { Badge, Card, LeadOnly, PageHeader, btn, btnPrimary, fmt, input, label } from "@/components/ui";
+import { Badge, Card, LeadOnly, PageHeader, btn, btnPrimary, control, fmt, input, label, link } from "@/components/ui";
 
 export default async function SettingsPage() {
   const me = await requireMember();
@@ -26,7 +26,7 @@ export default async function SettingsPage() {
         </Card>
 
         <Card title="MCP tokens">
-          <p className="mb-2 text-xs text-muted">Create new tokens on <a href="/setup" className="text-accent hover:underline">Connect Claude</a>.</p>
+          <p className="mb-2 text-xs text-muted">Create new tokens on <a href="/setup" className={link}>Connect Claude</a>.</p>
           <ul className="divide-y divide-line text-sm">
             {tokens.map((t) => (
               <li key={t.$id} className="flex items-center justify-between gap-2 py-2">
@@ -48,7 +48,7 @@ export default async function SettingsPage() {
                   <div className="flex gap-2">
                     <form action={setRole} className="flex gap-1">
                       <input type="hidden" name="id" value={m.$id} />
-                      <select name="role" defaultValue={m.role} className="rounded-md border border-line bg-panel px-2 py-1 text-sm">
+                      <select name="role" aria-label={`Role for ${m.name}`} defaultValue={m.role} className={`${control} py-1`}>
                         <option>lead</option><option>member</option>
                       </select>
                       <button className={btn}>Set</button>
@@ -60,9 +60,9 @@ export default async function SettingsPage() {
             ))}
           </ul>
           {lead && (
-            <form action={addMember} className="mt-3 flex gap-2">
-              <input name="name" required placeholder="Name or email" className={input} />
-              <select name="role" className="rounded-md border border-line bg-panel px-2 text-sm"><option>member</option><option>lead</option></select>
+            <form action={addMember} className="mt-4 flex flex-wrap gap-2 sm:flex-nowrap">
+              <input name="name" required placeholder="Name or email" aria-label="Name or email" className={`${control} min-w-0 flex-1`} />
+              <select name="role" aria-label="Role" className={control}><option>member</option><option>lead</option></select>
               <button className={btnPrimary}>Invite</button>
             </form>
           )}
@@ -72,7 +72,7 @@ export default async function SettingsPage() {
           <Card title="Audit log">
             <ul className="divide-y divide-line text-sm">
               {s.audit.slice(0, 20).map((a) => (
-                <li key={a.$id} className="flex flex-wrap gap-x-3 py-1.5">
+                <li key={a.$id} className="flex flex-wrap gap-x-3 gap-y-0.5 py-1.5">
                   <span className="w-28 text-xs text-muted">{fmt(a.at)}</span>
                   <span className="font-mono text-xs">{a.action}</span>
                   <span className="text-xs text-muted">{who(s, a.actor)} · {a.entity}{a.after && ` → ${a.after.slice(0, 60)}`}</span>

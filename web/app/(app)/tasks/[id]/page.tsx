@@ -3,7 +3,7 @@ import { requireMember } from "@/lib/auth";
 import { buildPrompt, db, itemState, itemsOf, noteOf, who } from "@/lib/mock";
 import { saveMyNote, saveTask, suggestChange } from "@/app/actions";
 import { ItemsTable } from "@/components/client";
-import { Badge, Card, LeadOnly, PageHeader, btn, btnPrimary, fmt, input, label, type Tone } from "@/components/ui";
+import { Badge, Card, LeadOnly, PageHeader, btn, btnPrimary, control, fmt, input, label, link, type Tone } from "@/components/ui";
 
 const tone: Record<string, Tone> = { free: "gray", "in progress": "blue", done: "green", failed: "red", skipped: "amber" };
 const text: Record<string, string> = {
@@ -55,7 +55,7 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[id]">) {
                   <label className="flex items-center gap-1.5"><input type="radio" name="repeat" value="once" defaultChecked={!task?.repeatDays} /> Once</label>
                   <label className="flex items-center gap-1.5">
                     <input type="radio" name="repeat" value="every" defaultChecked={!!task?.repeatDays} /> Every
-                    <input name="repeatDays" type="number" min={1} defaultValue={task?.repeatDays || 7} className={`${input} w-20`} /> days
+                    <input name="repeatDays" type="number" min={1} defaultValue={task?.repeatDays || 7} aria-label="Repeat every N days" className={`${control} w-20 py-1`} /> days
                   </label>
                 </div>
                 <div>
@@ -131,7 +131,7 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[id]">) {
                   <li key={v.$id} className="py-2.5 text-sm">
                     <span className="font-medium">v{v.version} {v.version === task.currentVersion && <Badge tone="green">in use</Badge>}</span>
                     <p className="text-xs text-muted">{who(s, v.authorId)} · {fmt(v.createdAt)}</p>
-                    <details className="mt-1"><summary className="cursor-pointer text-xs text-accent">prompt</summary>
+                    <details className="mt-1"><summary className={`cursor-pointer text-xs ${link}`}>Show prompt</summary>
                       <pre className="mt-1 whitespace-pre-wrap rounded bg-hover p-2 font-mono text-xs">{v.prompt}</pre>
                     </details>
                   </li>

@@ -2,17 +2,13 @@
 // node-appwrite is pinned to 22.1.3: the last SDK built for API 1.8.1, which api.rando.ge runs.
 import "server-only";
 import { cookies } from "next/headers";
-import { Account, Client, TablesDB, Users } from "node-appwrite";
+import { Account, AppwriteException, Client, Query, TablesDB, Users } from "node-appwrite";
+import { DB_ID } from "./tables";
 
 const endpoint = process.env.APPWRITE_ENDPOINT!;
 const project = process.env.APPWRITE_PROJECT_ID!;
 
-export const DB_ID = process.env.APPWRITE_DATABASE_ID ?? "commons";
-export const TEAM_ID = process.env.TEAM_ID ?? "rando";
-export const T = {
-  members: "members", tasks: "tasks", taskVersions: "task_versions", taskItems: "task_items", memberNotes: "member_notes",
-  claims: "claims", logs: "logs", settings: "settings", apiTokens: "api_tokens", audit: "audit_log",
-} as const;
+export { DB_ID, TEAM_ID, T } from "./tables";
 
 const base = () => new Client().setEndpoint(endpoint).setProject(project);
 
@@ -38,5 +34,28 @@ export async function ping(): Promise<boolean> {
     return JSON.stringify(r).includes("Pong!");
   } catch {
     return false;
+  }
+}
+
+export const isCode = (e: unknown, code: number) => e instanceof AppwriteException && e.code === code;
+
+/** Every row matching the queries, paged by cursor (Appwrite returns 25 by default). */
+export async function allRows<R>(table: string, queries: string[] = []): Promise<R[]> {
+  const out: R[] = [];
+  for (let cursor: string | null = null; ;) {
+    const page: { rows: Array<{ $id: string }> } = await adminTables().listRows(DB_ID, table, [...queries, Query.limit(500), ...(cursor ? [Query.cursorAfter(cursor)] : [])]);
+    out.push(...(page.rows as unknown as R[]));
+    if (page.rows.length < 500) return out;
+    cursor = page.rows[page.rows.length - 1].$id;
+  }
+}
+
+/** One row, or null when it does not exist. */
+export async function rowOrNull<R>(table: string, id: string): Promise<R | null> {
+  try {
+    return (await adminTables().getRow(DB_ID, table, id)) as unknown as R;
+  } catch (e) {
+    if (isCode(e, 404)) return null;
+    throw e;
   }
 }

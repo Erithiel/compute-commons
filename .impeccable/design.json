@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-17T17:35:00Z",
+  "title": "Design System: Compute Commons",
+  "extensions": {
+    "colorMeta": {
+      "signal-violet": { "role": "primary", "displayName": "Signal Violet", "canonical": "oklch(0.5 0.17 288)", "tonalRamp": ["oklch(0.15 0.08 288)", "oklch(0.25 0.12 288)", "oklch(0.35 0.15 288)", "oklch(0.5 0.17 288)", "oklch(0.62 0.15 288)", "oklch(0.76 0.12 288)", "oklch(0.87 0.07 288)", "oklch(0.95 0.03 288)"] },
+      "paper": { "role": "neutral", "displayName": "Paper", "canonical": "#fafaf9" },
+      "panel": { "role": "neutral", "displayName": "Panel", "canonical": "#ffffff" },
+      "sidebar": { "role": "neutral", "displayName": "Sidebar Stone", "canonical": "#f3f2ef" },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#1c1917", "tonalRamp": ["#1c1917", "#292524", "#44403c", "#57534e", "#6f6964", "#a8a29e", "#e7e5e4", "#fafaf9"] },
+      "muted": { "role": "neutral", "displayName": "Muted Stone", "canonical": "#6f6964" },
+      "line": { "role": "neutral", "displayName": "Line", "canonical": "#e7e5e4" },
+      "hover": { "role": "neutral", "displayName": "Hover Stone", "canonical": "#f2f1ef" }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Page titles in the page header." },
+      "title": { "displayName": "Title", "purpose": "Card headers and task titles on the board." },
+      "body": { "displayName": "Body", "purpose": "Table cells, rows, form values, paragraphs. Tabular numerals on." },
+      "label": { "displayName": "Label", "purpose": "Form labels, table headers, badges, meta lines." },
+      "mono": { "displayName": "Mono", "purpose": "Prompts, policy, commands and other text read by Claude or a terminal." }
+    },
+    "shadows": [
+      { "name": "pill-lift", "value": "0 1px 2px rgb(0 0 0 / 0.06)", "purpose": "Active nav item, with a 1px Line ring." },
+      { "name": "card-float", "value": "0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -12px rgb(0 0 0 / 0.12)", "purpose": "Login card only." }
+    ],
+    "motion": [
+      { "name": "state", "value": "150ms ease", "purpose": "Hover, press and focus-ring transitions. Never transition outline-color." },
+      { "name": "disclosure", "value": "200ms ease", "purpose": "Log row chevron rotation." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button", "kind": "button", "refersTo": "button-primary",
+      "description": "The one commit action per form.",
+      "html": "<button class=\"ds-btn-primary\">Save</button>",
+      "css": ".ds-btn-primary { background: var(--ink, #1c1917); color: var(--paper, #fafaf9); border: 0; border-radius: 6px; padding: 6px 12px; font: 500 14px/20px Geist, system-ui, sans-serif; white-space: nowrap; cursor: pointer; transition: opacity .15s, transform .15s; } .ds-btn-primary:hover { opacity: .85; } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:focus-visible { outline: 2px solid var(--accent, oklch(0.5 0.17 288)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button", "kind": "button", "refersTo": "button-secondary",
+      "description": "Filter, Refresh, Revoke, Copy, Switch.",
+      "html": "<button class=\"ds-btn\">Filter</button>",
+      "css": ".ds-btn { background: var(--panel, #fff); color: var(--ink, #1c1917); border: 1px solid var(--line, #e7e5e4); border-radius: 6px; padding: 4px 10px; font: 400 14px/20px Geist, system-ui, sans-serif; white-space: nowrap; cursor: pointer; transition: background-color .15s, transform .15s; } .ds-btn:hover { background: var(--hover, #f2f1ef); } .ds-btn:active { transform: translateY(1px); } .ds-btn:focus-visible { outline: 2px solid var(--accent, oklch(0.5 0.17 288)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Input", "kind": "input", "refersTo": "input",
+      "description": "Text field; width is opt-in.",
+      "html": "<input class=\"ds-input\" placeholder=\"Title\" />",
+      "css": ".ds-input { background: var(--panel, #fff); color: var(--ink, #1c1917); border: 1px solid var(--line, #e7e5e4); border-radius: 6px; padding: 6px 10px; font: 400 14px/20px Geist, system-ui, sans-serif; outline: none; transition: border-color .15s, box-shadow .15s; } .ds-input::placeholder { color: var(--muted, #6f6964); opacity: .8; } .ds-input:focus { border-color: var(--accent, oklch(0.5 0.17 288)); box-shadow: 0 0 0 3px var(--accent-soft, oklch(0.5 0.17 288 / 0.1)); }"
+    },
+    {
+      "name": "Status Badges", "kind": "chip", "refersTo": "badge",
+      "description": "The five fixed work states.",
+      "html": "<span class=\"ds-badge\">free</span> <span class=\"ds-badge ds-blue\">in progress</span> <span class=\"ds-badge ds-green\">done</span> <span class=\"ds-badge ds-red\">failed</span> <span class=\"ds-badge ds-amber\">skipped</span>",
+      "css": ".ds-badge { display: inline-block; white-space: nowrap; border-radius: 4px; padding: 2px 6px; font: 500 12px/16px Geist, system-ui, sans-serif; background: var(--hover, #f2f1ef); color: var(--muted, #6f6964); } .ds-green { background: rgb(34 197 94 / .15); color: #15803d; } .ds-blue { background: rgb(59 130 246 / .15); color: #1d4ed8; } .ds-red { background: rgb(239 68 68 / .15); color: #b91c1c; } .ds-amber { background: rgb(245 158 11 / .15); color: #92400e; }"
+    },
+    {
+      "name": "Card", "kind": "card", "refersTo": "card",
+      "description": "Flat panel with a header row.",
+      "html": "<section class=\"ds-card\"><header class=\"ds-card-h\"><h2>Weekly competitor price check</h2><span>every 7d · Rati</span></header><div class=\"ds-card-b\">webstudio.ge</div></section>",
+      "css": ".ds-card { background: var(--panel, #fff); border: 1px solid var(--line, #e7e5e4); border-radius: 8px; font: 400 14px/20px Geist, system-ui, sans-serif; color: var(--ink, #1c1917); } .ds-card-h { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line, #e7e5e4); } .ds-card-h h2 { margin: 0; font-size: 14px; font-weight: 600; } .ds-card-h span { font-size: 12px; color: var(--muted, #6f6964); } .ds-card-b { padding: 16px; }"
+    },
+    {
+      "name": "Sidebar Nav", "kind": "nav", "refersTo": "nav-item-active",
+      "description": "Vertical nav on the sidebar layer; current page is a raised pill.",
+      "html": "<nav class=\"ds-nav\"><a aria-current=\"page\">Board</a><a>Tasks</a><a>Logs</a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: var(--sidebar, #f3f2ef); width: 200px; font: 400 14px/20px Geist, system-ui, sans-serif; } .ds-nav a { padding: 6px 12px; border-radius: 6px; color: var(--muted, #6f6964); cursor: pointer; transition: background-color .15s, color .15s; } .ds-nav a:hover { background: var(--hover, #f2f1ef); color: var(--ink, #1c1917); } .ds-nav a[aria-current] { background: var(--panel, #fff); color: var(--ink, #1c1917); font-weight: 500; box-shadow: 0 1px 2px rgb(0 0 0 / .06), 0 0 0 1px var(--line, #e7e5e4); } .ds-nav a:focus-visible { outline: 2px solid var(--accent, oklch(0.5 0.17 288)); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Shift Log",
+    "overview": "The app is the handover log between shifts of work. Claude runs after hours; people arrive in the morning and read what happened. Everything serves that read: warm paper surfaces, plain entries, a status on every line that can be taken in at a glance, and numbers that line up. Visits are short and task-shaped, so the interface stays out of the way and familiar controls behave exactly as expected.\n\nDensity is moderate and even: one sans family at small sizes, thin warm-grey borders, flat panels. Color is spent almost entirely on meaning. Status hues (free, in progress, done, failed, skipped) carry the board; the single accent, Signal Violet, only marks where you are, what is clickable and what has focus. Identity lives in small, precise details (the three-circles mark, themed focus rings and selection, tabular numerals) rather than in decoration.\n\nLight and dark follow the system setting and are equal citizens; every token has a dark counterpart.",
+    "keyCharacteristics": [
+      "Warm stone neutrals, paper background, white panels, a slightly deeper sidebar layer.",
+      "One accent (Signal Violet) for current place, links and focus only.",
+      "Five fixed status hues as the main source of color.",
+      "Geist at 12–20px, tight scale, semibold headings, tabular numerals everywhere.",
+      "Flat surfaces with 1px borders; shadow only for the active nav pill and the login card.",
+      "Plain and dependable controls: small radius, thin border, a 1px press."
+    ],
+    "rules": [
+      { "name": "The Signal Rule", "body": "Signal Violet means \"you are here, this is clickable, this has focus\". If an element is none of those, it is not violet.", "section": "colors" },
+      { "name": "The Status Owns Color Rule", "body": "Green, blue, red and amber are reserved for work state. Never use them for decoration or for the accent; a new state gets a new pairing, not a reused hue.", "section": "colors" },
+      { "name": "The Ledger Numerals Rule", "body": "Tabular numerals are on globally so times, counts and versions align in columns. Do not turn them off locally.", "section": "typography" },
+      { "name": "The Mono Means Literal Rule", "body": "Monospace is only for text that is copied to or read by Claude or a terminal. Never as a \"technical\" costume for labels.", "section": "typography" },
+      { "name": "The Flat Panel Rule", "body": "Cards, tables and inputs carry no shadow. If something needs to stand out, change its layer or its border, not its elevation.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep Signal Violet to links, current place, selection and focus (The Signal Rule).",
+      "Do give every unit of work a status badge using the fixed five-state palette.",
+      "Do use the width-free control and opt into full width, so filters and small inputs size themselves.",
+      "Do restack tables into title + status + meta lines below 768px instead of squeezing columns.",
+      "Do give every empty list a plain sentence and a way out (\"Nothing matches these filters. Show everything\").",
+      "Do check both light and dark themes; every surface token has a dark pair."
+    ],
+    "donts": [
+      "Don't add shadows to cards, tables or inputs (The Flat Panel Rule).",
+      "Don't use status hues for decoration or the accent for status.",
+      "Don't use monospace outside prompts, policy, commands and code.",
+      "Don't add mission or \"commons\" messaging to team-mode screens.",
+      "Don't add claim, complete or release buttons; work state is read-only in the web app.",
+      "Don't use Unicode glyphs or emoji as icons; draw them as inline SVG at the 1.6 stroke."
+    ]
+  }
+}

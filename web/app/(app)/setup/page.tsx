@@ -1,7 +1,7 @@
 import { requireMember } from "@/lib/auth";
 import { MCP_INSTRUCTIONS, SETUP_PROMPT } from "@/lib/mock";
 import { CopyButton, TokenForm } from "@/components/client";
-import { Card, PageHeader } from "@/components/ui";
+import { Card, PageHeader, link } from "@/components/ui";
 
 const APP_URL = "https://commons.example"; // ponytail: replace with the deployed URL (F0 step 11)
 
@@ -51,7 +51,7 @@ export default async function SetupPage() {
               That&apos;s all it needs: the tasks, and how to work on them, come from this app on every run.
             </p>
             <details className="mt-3">
-              <summary className="cursor-pointer text-xs text-accent">What our server tells Claude when it connects</summary>
+              <summary className={`cursor-pointer text-xs ${link}`}>What our server tells Claude when it connects</summary>
               <pre className="mt-2 whitespace-pre-wrap rounded-md bg-hover p-3 font-mono text-xs">{MCP_INSTRUCTIONS}</pre>
             </details>
           </Card>
@@ -60,8 +60,8 @@ export default async function SetupPage() {
         <li>
           <Card title="4 · Check it works">
             <p className="text-sm text-muted">
-              Run the schedule once by hand. On the <a href="/board" className="text-accent hover:underline">Board</a> an item should go to
-              <b> in progress</b>, then <b>done</b>, and a new entry appears in <a href="/logs" className="text-accent hover:underline">Logs</a> with what was done.
+              Run the schedule once by hand. On the <a href="/board" className={link}>Board</a> an item should go to
+              <b> in progress</b>, then <b>done</b>, and a new entry appears in <a href="/logs" className={link}>Logs</a> with what was done.
               Two runs never take the same item: Claude must claim it first, and a second claim is refused.
             </p>
           </Card>

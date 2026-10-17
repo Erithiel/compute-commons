@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useActionState, useState } from "react";
 import { createToken } from "@/app/actions";
-import { btn, btnPrimary, input } from "./ui";
+import { btn, btnPrimary, control, input, link } from "./ui";
 
 const links = [
   ["/board", "Board"], ["/tasks", "Tasks"], ["/logs", "Logs"], ["/setup", "Connect Claude"], ["/settings", "Settings"],
@@ -12,13 +12,16 @@ const links = [
 export function Nav() {
   const path = usePathname();
   return (
-    <nav className="flex gap-1 md:flex-col">
-      {links.map(([href, text]) => (
-        <Link key={href} href={href}
-          className={`rounded-md px-3 py-1.5 text-sm ${path.startsWith(href) ? "bg-hover font-medium" : "text-muted hover:bg-hover"}`}>
-          {text}
-        </Link>
-      ))}
+    <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-3 [scrollbar-width:none] md:mx-0 md:flex-col md:overflow-visible md:p-0">
+      {links.map(([href, text]) => {
+        const on = path.startsWith(href);
+        return (
+          <Link key={href} href={href} aria-current={on ? "page" : undefined}
+            className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm md:px-3 transition-[background-color,color] duration-150 ${on ? "bg-panel font-medium shadow-[0_1px_2px_rgb(0_0_0/0.06)] ring-1 ring-line" : "text-muted hover:bg-hover hover:text-ink"}`}>
+            {text}
+          </Link>
+        );
+      })}
     </nav>
   );
 }
@@ -71,7 +74,9 @@ export function ItemsTable({ initial, editable }: { initial: Omit<Row, "key">[];
               <td className="whitespace-nowrap px-2 text-xs">
                 {r.status ? <span className={r.status.tone}>{r.status.label}</span> : <span className="text-muted">new</span>}
               </td>
-              {editable && <td><button type="button" onClick={() => remove(r.key)} className="px-2 text-muted hover:text-red-600" aria-label="Remove row">×</button></td>}
+              {editable && <td><button type="button" onClick={() => remove(r.key)} className="grid size-7 place-items-center rounded text-muted hover:bg-red-500/10 hover:text-red-600" aria-label={`Remove row ${i + 1}`}>
+                <svg viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden><path d="M4 4l8 8M12 4l-8 8" /></svg>
+              </button></td>}
             </tr>
           ))}
           {!rows.length && <tr><td colSpan={4} className="px-2 py-3 text-xs text-muted">No rows: the task is done as one piece of work.</td></tr>}
@@ -79,7 +84,7 @@ export function ItemsTable({ initial, editable }: { initial: Omit<Row, "key">[];
       </table>
       {editable && (
         <div className="border-t border-line px-2 py-1.5">
-          <button type="button" onClick={() => add([""])} className="text-xs text-accent hover:underline">+ Add row</button>
+          <button type="button" onClick={() => add([""])} className={`text-xs ${link}`}>+ Add row</button>
           <span className="ml-3 text-xs text-muted">Tip: paste many lines into a row to add them all.</span>
         </div>
       )}
@@ -93,7 +98,7 @@ export function TokenForm({ appUrl }: { appUrl: string }) {
   return (
     <div className="space-y-3">
       <form action={action} className="flex flex-wrap gap-2 sm:flex-nowrap">
-        <select name="kind" className={`${input} sm:w-auto`}>
+        <select name="kind" className={`${control} w-full sm:w-auto`}>
           <option value="schedule">For my Claude schedule</option>
           <option value="manual">For my own Claude Code sessions</option>
         </select>

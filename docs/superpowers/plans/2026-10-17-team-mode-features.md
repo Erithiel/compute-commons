@@ -18,6 +18,7 @@ A **task** is a **title and a prompt**. The prompt can ask for anything; our app
 
 A clickable **mock UI** exists in `web/` and already follows this plan:
 - Pages: Board (read-only), Tasks (list + editor with a rows table), Logs, Connect Claude (`/setup`), Settings, Login. Data comes from an in-memory store, `web/lib/mock.ts`, which resets on restart. Mock server actions are in `web/app/actions.ts`. `web/lib/types.ts` matches §3.1.
+- **Backend is live (2026-10-17):** `npm run setup:appwrite` created the schema; `lib/tasks.ts`, `lib/claims.ts`, `lib/tokens.ts`, `lib/prompt.ts`, `lib/audit.ts` are implemented with tests; `app/actions.ts` writes to Appwrite; `lib/mock.ts` no longer holds data, it loads a per-request snapshot from Appwrite and keeps the page helpers (rename to `lib/data.ts` once the UI rework settles). Login is still the mock member picker (F1). `TEAM_ID=race-test npm run race-test` passes on 1.8.1.
 - **How a feature replaces the mock:** keep the page, swap its data calls and actions for Appwrite, move its actions into the feature's own `actions.ts`, and delete its slice of `mock.ts`. When `mock.ts` is empty, delete it and the "mock data" badge in the sidebar.
 - **Pages use route groups:** `web/app/(app)/<page>` for signed-in pages, sharing the sidebar layout and auth guard, and `web/app/(auth)/login`.
 - **Appwrite is connected:** project `hakatoni` (`6ad3926b000731cc9576`) on api.rando.ge. The sidebar pings it on every load. `node-appwrite` is pinned to **22.1.3**, the last SDK built for API 1.8.1; its `ping()` returns `{ message: "Pong!" }`, not a string. An API key is still needed in `web/.env.local`.
@@ -137,7 +138,7 @@ Notes: `teamId` is a constant from env in v1 (`TEAM_ID`). Using one shape for bo
 
 | Module | Owner | Exports |
 |---|---|---|
-| `web/lib/appwrite.ts` | F0 | `adminTables(): TablesDB`, `adminUsers(): Users`, `sessionAccount(): Promise<Account \| null>`, `ping(): Promise<boolean>`, `DB_ID`, `T` (table ids: `T.members`, `T.tasks`, `T.taskVersions`, `T.taskItems`, `T.memberNotes`, `T.claims`, `T.logs`, `T.settings`, `T.apiTokens`, `T.audit`), `TEAM_ID` |
+| `web/lib/appwrite.ts` | F0 | `adminTables(): TablesDB`, `adminUsers(): Users`, `sessionAccount(): Promise<Account \| null>`, `ping(): Promise<boolean>`, `DB_ID`, `T` (table ids: `T.members`, `T.tasks`, `T.taskVersions`, `T.taskItems`, `T.memberNotes`, `T.claims`, `T.takeovers`, `T.logs`, `T.settings`, `T.apiTokens`, `T.audit`), `TEAM_ID` |
 | `web/lib/audit.ts` | F0 | `audit(actor: string, action: string, entity: string, before?: unknown, after?: unknown): Promise<void>` |
 | `web/lib/auth.ts` | F1 (stub in F0) | `getMember(): Promise<Member \| null>`, `requireMember(): Promise<Member>`, `requireLead(): Promise<Member>` (throw `Forbidden`) |
 | `web/lib/tasks.ts` | F2 | `nextVersion(current: number): number`, `cleanRows(texts: string[]): string[]`, `syncItems(taskId: string, rows: string[]): Promise<void>`, `getNote(taskId: string, memberId: string): Promise<string>`, `saveNote(taskId: string, memberId: string, text: string): Promise<void>` (empty text deletes) |
@@ -163,7 +164,7 @@ Notes: `teamId` is a constant from env in v1 (`TEAM_ID`). Using one shape for bo
 - Create: `.github/workflows/ci.yml`, `web/vitest.config.ts`, `web/lib/__tests__/smoke.test.ts`
 
 - [x] **Step 1: Create the app.** Done with `create-next-app@16.4.2` (Tailwind 4, ESLint, `@/*` alias). shadcn deferred (see Current state).
-- [ ] **Step 2: Appwrite project.** Project `hakatoni` (`6ad3926b000731cc9576`) exists on api.rando.ge. Still to do: create an API key with Databases (read/write) and Users (read) scopes, and enable Email/Password auth. Put values in `web/.env.local` (copy `.env.example`):
+- [x] **Step 2: Appwrite project.** Project `hakatoni` (`6ad3926b000731cc9576`) exists on api.rando.ge; the API key is in `web/.env.local`. Still to do for F1: enable Email/Password auth. Put values in `web/.env.local` (copy `.env.example`):
 
 ```
 APPWRITE_ENDPOINT=https://api.rando.ge/v1
@@ -177,11 +178,11 @@ SESSION_COOKIE_NAME=commons_session
 - [x] **Step 3: Pin `node-appwrite`.** Pinned exactly to `22.1.3` (README at that tag: "API version 1.8.1, compatible with server 1.8.x"; 23.x targets 1.9). Recorded in `TECH.md` §2.
 - [x] **Step 4: `lib/types.ts`** exactly as §3.1.
 - [x] **Step 5: `lib/appwrite.ts`** with the exports in §3.2 plus `ping()`. `sessionAccount()` reads the session cookie and returns `null` when absent. Admin calls throw a clear error until `APPWRITE_API_KEY` is set.
-- [ ] **Step 6: `scripts/setup-appwrite.ts`** creates the tables from `TECH.md` §3 with columns matching §3.1 (strings, integers, booleans, string arrays, datetimes). Indexes: `taskVersions(taskId, version)` unique, `taskItems(taskId, position)`, `taskItems(status)`, `logs(taskId)`, `logs(by)`, `apiTokens(tokenHash)` unique, `audit(at)`. Seeds one `settings` row with the default policy (F3). Running it twice must not fail. Add `"setup:appwrite": "tsx scripts/setup-appwrite.ts"` to `package.json` scripts (`npm i -D tsx`).
-- [ ] **Step 7: `lib/audit.ts`** writes one row to `T.audit` with JSON-stringified `before`/`after` (same signature as `logAudit` in `mock.ts`).
+- [x] **Step 6: `scripts/setup-appwrite.ts`** (done; `-- --sample` loads the demo data into empty tables; additive only, see TECH §2 for the column-type quirk) creates the tables from `TECH.md` §3 with columns matching §3.1 (strings, integers, booleans, string arrays, datetimes). Indexes: `taskVersions(taskId, version)` unique, `taskItems(taskId, position)`, `taskItems(status)`, `logs(taskId)`, `logs(by)`, `apiTokens(tokenHash)` unique, `audit(at)`. Seeds one `settings` row with the default policy (F3). Running it twice must not fail. Add `"setup:appwrite": "tsx scripts/setup-appwrite.ts"` to `package.json` scripts (`npm i -D tsx`).
+- [x] **Step 7: `lib/audit.ts`** writes one row to `T.audit` with JSON-stringified `before`/`after` (same signature as `logAudit` in `mock.ts`).
 - [x] **Step 8: `lib/auth.ts` stub:** `getMember()` reads the `mock_member` cookie set by the mock login page and the sidebar "Signed in as" switcher. F1 replaces it and removes the switcher.
 - [x] **Step 9: App shell** with nav (Board, Tasks, Logs, Connect Claude, Settings) and every page built on mock data.
-- [ ] **Step 10: CI** runs `npm ci`, `npm run lint`, `npx tsc --noEmit`, `npx vitest run` in `web/`.
+- [x] **Step 10: CI** (`.github/workflows/ci.yml`) runs `npm ci`, `npm run lint`, `npx tsc --noEmit`, `npx vitest run` in `web/`.
 - [ ] **Step 11: Deploy** to Vercel (root directory `web`, region close to the Appwrite server, env vars set). Confirm the preview URL loads.
 - [ ] **Step 12: Commit and open PR** `feat/f0-foundation`.
 
@@ -277,7 +278,7 @@ This is what prevents double work. The unit is a task item (a row, or the hidden
   - status `available`, `failed` or `skipped` → eligible.
 - `sortWork(items)`: never-done first, then oldest `lastDoneAt`, then task order and row `position`.
 - `listEligible(caller)`: items of tasks the caller `canTake`, their claims, filtered with `isEligible`, ordered with `sortWork`, at most `limit` (default 10), with the task and last log.
-- `claim(itemId, caller)`: re-read the item and its task. Not found → `"not-found"`; `!canTake` → `"not-assigned"`; not eligible ignoring the lock → `"done"`. Then take the lock: `createRow(T.claims, itemId, {...})`. On HTTP 409, read the claim; if expired, delete and create **in one Appwrite transaction**; otherwise `"taken"`. Default lease 120 minutes. The claim stores `scheduled` from the caller.
+- `claim(itemId, caller)`: re-read the item and its task. Not found → `"not-found"`; `!canTake` → `"not-assigned"`; not eligible ignoring the lock → `"done"`. Then take the lock: `createRow(T.claims, itemId, {...})`. On HTTP 409, read the claim; if active → `"taken"`; if expired, create the `claim_takeovers` marker (id = hash(itemId + its claimedAt)) and, if that succeeds, overwrite the claim; a 409 on the marker → `"taken"`. After winning, re-read the item; if it is no longer eligible, release and return `"done"`. (Transactions were tried first and let two takeovers win on 1.8.1.) Default lease 120 minutes. The claim stores `scheduled` from the caller.
 - `claimNext(caller)`: runs `listEligible` and tries `claim` on each item in order until one succeeds; `null` when nothing is left. Used by the `next_task` MCP tool.
 - `heartbeat`: only the current holder can extend.
 - `finish`: in one transaction, create the `logs` row (row text copied into `item`, startedAt = claim's `claimedAt`, `scheduled` from the claim, `version` = task's `currentVersion`), update the item (`status`, `lastLogId`, and `lastDoneAt` when done), delete the claim. Only the holder can finish.
