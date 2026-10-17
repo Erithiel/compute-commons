@@ -3,8 +3,8 @@
 //   npm run setup:appwrite              schema only
 //   npm run setup:appwrite -- --sample  also loads sample members/tasks (only into empty tables)
 // ponytail: additive only. Changing or dropping a column is done by hand in the console.
-import { AppwriteException, Client, IndexType, TablesDB } from "node-appwrite";
-import { DB_ID, DEFAULT_POLICY, T, TEAM_ID } from "../lib/tables";
+import { AppwriteException, Client, IndexType, Query, TablesDB } from "node-appwrite";
+import { DB_ID, DEFAULT_POLICY, T } from "../lib/tables";
 import { sample } from "./sample";
 
 type Col =
@@ -23,7 +23,7 @@ export const SCHEMA: Record<string, { name: string; columns: Col[]; indexes: Idx
     name: "Members",
     columns: [id("teamId"), id("userId"), { key: "name", type: "varchar", size: 128, required: true },
       { key: "role", type: "enum", elements: ["lead", "member"], required: true }],
-    indexes: [{ key: "team_user", type: "unique", columns: ["teamId", "userId"] }],
+    indexes: [{ key: "team_user", type: "unique", columns: ["teamId", "userId"] }, { key: "user", type: "unique", columns: ["userId"] }],
   },
   [T.tasks]: {
     name: "Tasks",
@@ -35,14 +35,14 @@ export const SCHEMA: Record<string, { name: string; columns: Col[]; indexes: Idx
   },
   [T.taskVersions]: {
     name: "Task versions",
-    columns: [id("taskId"), { key: "version", type: "integer", required: true },
+    columns: [id("teamId", false), id("taskId"), { key: "version", type: "integer", required: true },
       { key: "prompt", type: "mediumtext", required: true }, id("authorId"), at("createdAt")],
-    indexes: [{ key: "task_version", type: "unique", columns: ["taskId", "version"] }],
+    indexes: [{ key: "task_version", type: "unique", columns: ["taskId", "version"] }, { key: "team", type: "key", columns: ["teamId"] }],
   },
   [T.memberNotes]: {
     name: "Member notes",
-    columns: [id("taskId"), id("memberId"), { key: "text", type: "text", required: true }, at("updatedAt")],
-    indexes: [{ key: "task_member", type: "unique", columns: ["taskId", "memberId"] }],
+    columns: [id("teamId", false), id("taskId"), id("memberId"), { key: "text", type: "text", required: true }, at("updatedAt")],
+    indexes: [{ key: "task_member", type: "unique", columns: ["taskId", "memberId"] }, { key: "team", type: "key", columns: ["teamId"] }],
   },
   [T.taskItems]: {
     name: "Task items",
@@ -54,8 +54,8 @@ export const SCHEMA: Record<string, { name: string; columns: Col[]; indexes: Idx
   },
   [T.claims]: {
     name: "Claims", // row id = task item id: creating it is the lock
-    columns: [id("by"), { key: "scheduled", type: "boolean", required: false, default: false }, at("claimedAt"), at("leaseUntil")],
-    indexes: [],
+    columns: [id("teamId", false), id("by"), { key: "scheduled", type: "boolean", required: false, default: false }, at("claimedAt"), at("leaseUntil")],
+    indexes: [{ key: "team", type: "key", columns: ["teamId"] }],
   },
   [T.takeovers]: {
     // Row id = hash(item id + the expired claim's claimedAt). Creating it is the lock for taking over an expired claim;
@@ -66,25 +66,42 @@ export const SCHEMA: Record<string, { name: string; columns: Col[]; indexes: Idx
   },
   [T.logs]: {
     name: "Logs",
-    columns: [id("taskId"), id("itemId"), { key: "item", type: "varchar", size: 1024, required: false }, id("by"),
+    columns: [id("teamId", false), id("taskId"), id("itemId"), { key: "item", type: "varchar", size: 1024, required: false }, id("by"),
       { key: "scheduled", type: "boolean", required: false, default: false },
       { key: "outcome", type: "enum", elements: ["done", "failed", "skipped"], required: true },
       { key: "summary", type: "text", required: true }, { key: "details", type: "mediumtext" },
       { key: "version", type: "integer", required: true }, at("startedAt"), at("finishedAt")],
     indexes: [{ key: "task", type: "key", columns: ["taskId"] }, { key: "by", type: "key", columns: ["by"] },
-      { key: "finished", type: "key", columns: ["finishedAt"] }],
+      { key: "finished", type: "key", columns: ["finishedAt"] }, { key: "team", type: "key", columns: ["teamId"] }],
   },
   [T.settings]: {
-    name: "Settings", // one row, id "settings"
+    name: "Settings", // one row per team, id = team id
     columns: [id("teamId"), { key: "policy", type: "text", required: false }],
     indexes: [],
   },
   [T.apiTokens]: {
     name: "API tokens",
-    columns: [id("owner"), { key: "scheduled", type: "boolean", required: false, default: false },
+    columns: [id("teamId", false), id("owner"), { key: "scheduled", type: "boolean", required: false, default: false },
       { key: "name", type: "varchar", size: 128, required: true }, { key: "tokenHash", type: "varchar", size: 64, required: true },
       at("lastUsedAt", false), { key: "revoked", type: "boolean", required: false, default: false }],
-    indexes: [{ key: "hash", type: "unique", columns: ["tokenHash"] }, { key: "owner", type: "key", columns: ["owner"] }],
+    indexes: [{ key: "hash", type: "unique", columns: ["tokenHash"] }, { key: "owner", type: "key", columns: ["owner"] }, { key: "team", type: "key", columns: ["teamId"] }],
+  },
+  [T.teams]: {
+    name: "Teams",
+    columns: [{ key: "name", type: "varchar", size: 128, required: true }, id("createdBy"), at("createdAt")],
+    indexes: [],
+  },
+  [T.invites]: {
+    name: "Invites",
+    columns: [id("teamId"), { key: "codeHash", type: "varchar", size: 64, required: true },
+      { key: "role", type: "enum", elements: ["lead", "member"], required: true }, id("createdBy"), at("expiresAt"),
+      id("usedBy", false), at("usedAt", false), { key: "revoked", type: "boolean", required: false, default: false }],
+    indexes: [{ key: "code", type: "unique", columns: ["codeHash"] }, { key: "team", type: "key", columns: ["teamId"] }],
+  },
+  [T.loginAttempts]: {
+    name: "Login attempts", // row id = emailKey(email); see lib/team-rules.ts
+    columns: [{ key: "fails", type: "integer", required: false, default: 0 }, at("windowStart")],
+    indexes: [],
   },
   [T.audit]: {
     name: "Audit log",
@@ -153,19 +170,40 @@ async function main() {
     }
   }
 
-  try { await db.getRow(DB_ID, T.settings, "settings"); } catch (e) {
-    if (!notFound(e)) throw e;
-    await db.createRow(DB_ID, T.settings, "settings", { teamId: TEAM_ID, policy: DEFAULT_POLICY });
-    console.log("+ settings row");
-  }
+  const adopt = process.argv.indexOf("--adopt-team");
+  if (adopt > 0) await adoptTeam(process.argv[adopt + 1], process.argv[adopt + 2] ?? process.argv[adopt + 1]);
 
   if (process.argv.includes("--sample")) await loadSample();
   console.log("Schema is up to date.");
 }
 
+/** One-off: the data created while TEAM_ID was an env var becomes team <id>. Safe to run twice. */
+async function adoptTeam(teamId: string, name: string) {
+  try { await db.getRow(DB_ID, T.teams, teamId); } catch (e) {
+    if (!notFound(e)) throw e;
+    await db.createRow(DB_ID, T.teams, teamId, { name, createdBy: "migration", createdAt: new Date().toISOString() });
+    console.log(`+ team ${teamId}`);
+  }
+  // Settings: one row per team, id = team id.
+  try { await db.getRow(DB_ID, T.settings, teamId); } catch (e) {
+    if (!notFound(e)) throw e;
+    const old = await db.getRow(DB_ID, T.settings, "settings").catch(() => null);
+    await db.createRow(DB_ID, T.settings, teamId, { teamId, policy: old?.policy ?? DEFAULT_POLICY });
+    if (old) await db.deleteRow(DB_ID, T.settings, "settings");
+    console.log(`+ settings ${teamId}`);
+  }
+  // Backfill teamId where it is still empty.
+  for (const table of [T.taskVersions, T.memberNotes, T.claims, T.logs, T.apiTokens]) {
+    const rows = (await db.listRows(DB_ID, table, [Query.isNull("teamId"), Query.limit(500)])).rows;
+    for (const r of rows) await db.updateRow(DB_ID, table, r.$id, { teamId });
+    if (rows.length) console.log(`~ ${rows.length} rows in ${table} → ${teamId}`);
+  }
+}
+
 /** Sample data for a fresh project. Skips any table that already has rows. */
 async function loadSample() {
-  for (const [table, rows] of Object.entries(sample())) {
+  const t = process.argv.indexOf("--team");
+  for (const [table, rows] of Object.entries(sample(t > 0 ? process.argv[t + 1] : "rando"))) {
     if ((await db.listRows(DB_ID, table, [], undefined, true)).total > 0) { console.log(`= ${table} has rows, sample skipped`); continue; }
     for (const { $id, ...data } of rows) await db.createRow(DB_ID, table, $id, data);
     console.log(`+ ${rows.length} sample rows in ${table}`);
