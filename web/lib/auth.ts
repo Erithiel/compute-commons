@@ -35,15 +35,16 @@ export async function signIn(email: string, password: string): Promise<string | 
     (await cookies()).set(COOKIE, s.secret, {
       httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", expires: new Date(s.expire),
     });
-    if (attempt) await adminTables().deleteRow(DB_ID, T.loginAttempts, key);
-    return null;
   } catch (e) {
+    if (isCode(e, 400)) return "Wrong email or password."; // malformed email / empty password: not a failed attempt
     if (!isCode(e, 401)) throw e;
     const fresh = !attempt || now.getTime() - new Date(attempt.windowStart).getTime() >= LOGIN_WINDOW_MS;
     await adminTables().upsertRow(DB_ID, T.loginAttempts, key,
       fresh ? { fails: 1, windowStart: now.toISOString() } : { fails: attempt!.fails + 1, windowStart: attempt!.windowStart });
     return "Wrong email or password.";
   }
+  if (attempt) await adminTables().deleteRow(DB_ID, T.loginAttempts, key).catch(() => {});
+  return null;
 }
 
 export async function signOut() {
