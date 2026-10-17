@@ -3,7 +3,7 @@
 > Hackathon brief, kept up to date so the whole team is on the same page.
 > **Planning stage. Nothing is being built yet.**
 > Last updated: 2026-10-17. Focus: **team mode only**. Clan mode is parked (see section 10).
-> Related files: `DECISIONS.md` (what we decided or parked), `POSITIONING.md` (how we present ourselves), `security/SECURITY.md` (trust ladder and threat model for the later clan mode; not critical for team mode), `SOURCES.md` (facts and sources).
+> Related files: `TECH.md` (stack, data model, MCP tools, build order), `DECISIONS.md` (what we decided or parked), `POSITIONING.md` (how we present ourselves), `security/SECURITY.md` (trust ladder and threat model for the later clan mode; not critical for team mode), `SOURCES.md` (facts and sources).
 
 ## 1. The problem
 
