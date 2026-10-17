@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { randomBytes } from "node:crypto";
 import { requireLead, requireMember } from "@/lib/auth";
 import { db, ensureItems, id, logAudit, now, parseItems, TEAM } from "@/lib/mock";
-import type { Outcome, RiskLabel, Role, TaskMode } from "@/lib/types";
+import type { Outcome, Role, TaskMode } from "@/lib/types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const list = (v: string) => v.split(",").map((x) => x.trim()).filter(Boolean);
@@ -45,7 +45,7 @@ export async function finishItem(f: FormData) {
   const log = {
     $id: id("l"), taskItemId: iid, taskId: task.$id, by: me.$id, outcome,
     summary: { done: "Done (mock run).", failed: "Failed (mock run).", skipped: "Skipped by hand." }[outcome],
-    branchUrl: outcome === "done" ? `https://github.com/rando-ge/example/tree/commons/${task.$id}-${now().slice(0, 10)}` : null,
+    details: outcome === "done" ? "Mock run: in the real flow Claude sends what it did and where the result is via complete." : null,
     version: task.currentVersion, startedAt: c?.claimedAt ?? now(), finishedAt: now(),
   };
   s.logs.unshift(log);
@@ -76,21 +76,20 @@ export async function saveTask(f: FormData) {
   const s = await db();
   let task = s.tasks.find((k) => k.$id === str(f, "id"));
   if (!task) {
-    task = { $id: id("k"), teamId: TEAM, title: "", description: "", mode: "once", redoDays: 0, items: [], requires: [], priority: 0, currentVersion: 0, approvedVersion: null };
+    task = { $id: id("k"), teamId: TEAM, title: "", description: "", mode: "once", redoDays: 0, items: [], priority: 0, currentVersion: 0, approvedVersion: null };
     s.tasks.push(task);
   }
   const mode = str(f, "mode") as TaskMode;
   Object.assign(task, {
     title: str(f, "title"), description: str(f, "description"), mode,
     redoDays: mode === "routine" ? Math.max(1, Number(str(f, "redoDays")) || 7) : 0,
-    items: parseItems(str(f, "items")), requires: list(str(f, "requires")), priority: Number(str(f, "priority")) || 0,
+    items: parseItems(str(f, "items")), priority: Number(str(f, "priority")) || 0,
   });
   const prompt = str(f, "prompt");
   const cur = s.taskVersions.find((v) => v.taskId === task.$id && v.version === task.currentVersion);
-  const riskLabel = str(f, "riskLabel") as RiskLabel;
-  if (!cur || cur.prompt !== prompt || cur.riskLabel !== riskLabel) {
+  if (!cur || cur.prompt !== prompt) {
     task.currentVersion++;
-    s.taskVersions.push({ $id: id("v"), taskId: task.$id, version: task.currentVersion, prompt, riskLabel, authorId: lead.$id, createdAt: now() });
+    s.taskVersions.push({ $id: id("v"), taskId: task.$id, version: task.currentVersion, prompt, authorId: lead.$id, createdAt: now() });
   }
   await ensureItems(task.$id, task.items);
   await logAudit(lead.$id, cur ? "task.edit" : "task.create", task.$id, undefined, { title: task.title, version: task.currentVersion });
@@ -114,9 +113,9 @@ export async function suggestChange(f: FormData) {
 export async function quickTask(f: FormData) {
   const lead = await requireLead();
   const s = await db();
-  const t = { $id: id("k"), teamId: TEAM, title: str(f, "title"), description: "", mode: "once" as const, redoDays: 0, items: [], requires: [], priority: 0, currentVersion: 1, approvedVersion: null };
+  const t = { $id: id("k"), teamId: TEAM, title: str(f, "title"), description: "", mode: "once" as const, redoDays: 0, items: [], priority: 0, currentVersion: 1, approvedVersion: null };
   s.tasks.push(t);
-  s.taskVersions.push({ $id: id("v"), taskId: t.$id, version: 1, prompt: str(f, "prompt"), riskLabel: "report-only", authorId: lead.$id, createdAt: now() });
+  s.taskVersions.push({ $id: id("v"), taskId: t.$id, version: 1, prompt: str(f, "prompt"), authorId: lead.$id, createdAt: now() });
   await ensureItems(t.$id, []);
   await logAudit(lead.$id, "task.create", t.$id, undefined, { title: t.title });
   done();

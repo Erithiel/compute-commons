@@ -14,7 +14,7 @@
                               list work · get task · claim · heartbeat · complete · fail · skip · board
 
  The actual work (doing a task, or one item of its list) happens inside Claude, in a fresh workspace,
- and its result lands on a git branch picked by the client's branching strategy.
+ and its result goes wherever the task prompt says (a doc, a message, a branch…); Claude reports it in the log.
  Our server only stores tasks, claims and logs.
 ```
 
@@ -49,12 +49,12 @@ One database, `commons`. v1 serves one team, and every row carries `teamId` so m
 | Table | Key columns | Notes |
 |---|---|---|
 | `members` | `userId` (Appwrite user), `teamId`, `role` (`lead` \| `member`), `name` | Roles are the simple permissions feature (IDEA §7). |
-| `tasks` | `teamId`, `title`, `description`, `mode` (`once` \| `routine`), `redoDays`, `items` (optional list of strings), `requires` (tools, keys), `priority`, `currentVersion`, `approvedVersion` | Any repeatable job (D16). Schedules only take tasks with an approved version. |
-| `task_versions` | `taskId`, `version`, `prompt` (markdown, may use `{{item}}`), `riskLabel` (`report-only` \| `changes-files`), `authorId`, `createdAt` | Immutable. Editing a task's prompt creates a new row. |
+| `tasks` | `teamId`, `title`, `description`, `mode` (`once` \| `routine`), `redoDays`, `items` (optional list of strings), `priority`, `currentVersion`, `approvedVersion` | Any repeatable job, not only code (D16, D17). Schedules only take tasks with an approved version. |
+| `task_versions` | `taskId`, `version`, `prompt` (markdown, may use `{{item}}`), `authorId`, `createdAt` | Immutable. Editing a task's prompt creates a new row. |
 | `task_items` | `teamId`, `taskId`, `item` (one line of the list, `""` when there is none), `status` (`available` \| `done` \| `failed` \| `skipped`), `lastDoneAt`, `lastLogId` | The unit of work and of claiming. One row per list line. |
 | `claims` | **row id = task item id**, `by` (member id or `team`), `claimedAt`, `leaseUntil` | The lock. See §4. |
-| `logs` | `taskItemId`, `taskId`, `by`, `outcome` (`done` \| `failed` \| `skipped`), `summary`, `branchUrl`, `version`, `startedAt`, `finishedAt` | Who did what, when. The board's and the Logs page's data. |
-| `settings` | `teamId`, `policy` (markdown), `maxItemsPerRun`, `maxMinutesPerRun` | One row. The policy goes before every task prompt and holds the client's branching strategy (D15). The budget is returned to schedules by `list_work`. |
+| `logs` | `taskItemId`, `taskId`, `by`, `outcome` (`done` \| `failed` \| `skipped`), `summary`, `details` (free text: what was done, where the result is), `version`, `startedAt`, `finishedAt` | Who did what, when. The board's and the Logs page's data. |
+| `settings` | `teamId`, `policy` (markdown), `maxItemsPerRun`, `maxMinutesPerRun` | One row. The policy goes before every task prompt (rules such as how to deliver results; for code teams, the branching strategy, D15). The budget is returned to schedules by `list_work`. |
 | `api_tokens` | `owner` (member id or `team`), `name`, `tokenHash`, `lastUsedAt`, `revoked` | MCP access (§6). Store the hash only. |
 | `audit_log` | `teamId`, `actor`, `action`, `entity`, `before`, `after`, `at` | Every change to tasks, settings, members and tokens. |
 
@@ -79,10 +79,10 @@ The one tricky part is two people (or a person and a schedule) taking the same t
 | Tool | Input | Does |
 |---|---|---|
 | `list_work` | `limit?` | Eligible task items with task title, item, last log and suggested order, plus the run's budget. The AI chooses from these. |
-| `get_task` | `itemId` | Merged prompt: team policy + task prompt (approved version for schedules), with `{{item}}` filled in, plus `requires`. |
+| `get_task` | `itemId` | Merged prompt: team policy + task prompt (approved version for schedules), with `{{item}}` filled in. |
 | `claim` | `itemId` | Atomic claim (§4). Returns the lease end time, or "taken". |
 | `heartbeat` | `itemId` | Extends the lease. |
-| `complete` | `itemId`, `summary`, `branchUrl` | Writes a "done" log. |
+| `complete` | `itemId`, `summary`, `details?` | Writes a "done" log. |
 | `fail` | `itemId`, `reason` | Writes a "failed" log and frees the item. |
 | `skip` | `itemId`, `reason` | The AI decided not to take it. Logged so the lead can see why. |
 | `board` | – | Who is working on what, what is free, recent logs. |
@@ -108,9 +108,9 @@ The server also sends `instructions` (the workflow: list → claim → get_task 
 | Page | For | Contents |
 |---|---|---|
 | `/login` | everyone | Email + password. |
-| `/board` | everyone | Task items: free, claimed (who, until when), done (link to branch), failed (reason). Quick "add task". |
-| `/tasks` | lead edits, members read | Task list and editor: title, description, **prompt**, one-off or routine (redo after N days), optional item list, requires, risk label; version history, approve, preview. |
-| `/logs` | everyone | Every log: who, when, task, item, outcome, summary, branch. |
+| `/board` | everyone | Task items: free, claimed (who, until when), done (summary), failed (reason). Quick "add task". |
+| `/tasks` | lead edits, members read | Task list and editor: title, description, **prompt**, one-off or routine (redo after N days), optional item list, priority; version history, approve, preview. |
+| `/logs` | everyone | Who executed what: when, who, task, item, outcome, duration, summary; expand for details. |
 | `/setup` | everyone | **Connect Claude**, once: create a token, guide to add the connector, and **"copy prompt"** for the Claude scheduled task. |
 | `/settings` | lead | Members and roles, team policy, run budget, API tokens. |
 | `/settings/tokens` | everyone | Create or revoke your own MCP token; shows the `claude mcp add` command. |
@@ -125,7 +125,7 @@ Use the "commons" MCP connector and work through our team's task queue.
 
 Everything else comes from our server, so changing a task or the rules changes what tonight's run does without re-pasting:
 - **How to work** (list → claim → get_task → heartbeat → complete/fail/skip → stop at budget) is the MCP server's `instructions`, sent when Claude connects.
-- **The task itself** (team policy with the branching strategy + task prompt, with `{{item}}` filled in) comes from `get_task`.
+- **The task itself** (team policy + task prompt, with `{{item}}` filled in) comes from `get_task`.
 - **The budget** comes back from `list_work`.
 
 ## 9. Repository layout
@@ -175,7 +175,7 @@ compute-commons/
 - Routine limits (minimum interval, daily run caps, research-preview status): confirm in Anthropic's official routine docs; our numbers come from third-party guides.
 - `node-appwrite`: pinned 22.1.3 for server 1.8.1 (done).
 - Transaction behaviour on a conflicting claim (§4): test on our server.
-- Tasks that need scripts or tools: a schedule's cloud workspace only has what the cloned repo and environment provide. List each task's `requires` and test the first task in a real schedule early.
+- Tasks that need tools or access: a schedule's cloud workspace only has what its environment provides. Say what a task needs in its prompt and test the first task in a real schedule early.
 - Vercel plan and function time limits: confirm. Our routes are short database calls.
 
 ## Sources

@@ -27,6 +27,7 @@ Short record of what the team has decided, parked or assigned. Newest at the bot
 
 | D15 | Branching strategy | **The client chooses it.** Not every task or result has to be a new branch: the client picks a branch per task, per run, per target, one shared working branch, or their own convention. It is set in the team policy prefix (a routine prefix may override it). Still never a direct change to `main`; a human reviews and merges. |
 | D16 | One concept: tasks | **No separate targets, skills or routines.** A task is a title, description and prompt, either one-off or routine (redo every N days), with an optional item list (one line per site, repo, file…) where each line is claimed separately so nobody doubles up. Every attempt writes a log (who, when, what, branch). Targets added a page, kinds and tags without a benefit a plain list doesn't give. Revises D12/D13 wording ("skill on a target" → "task item"). |
+| D17 | No code-specific fields | **Tasks are not only about code.** No branch link, risk label (report-only / changes-files) or tools-needed fields. Where a result goes, what a task needs and how careful to be are written in the task prompt or team policy; Claude reports results as a summary plus free-text details. Approval and versions stay: they keep unattended runs safe for any kind of task. Narrows D11/D15 to code tasks. |
 
 ## Consequences of D4 (to design)
 

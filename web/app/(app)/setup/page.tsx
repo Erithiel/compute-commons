@@ -60,7 +60,7 @@ export default async function SetupPage() {
           <Card title="4 · Check it works">
             <p className="text-sm text-muted">
               Run the schedule once by hand. On the <a href="/board" className="text-accent hover:underline">Board</a> an item should go to
-              <b> in progress</b>, then <b>done</b>, and a new entry appears in <a href="/logs" className="text-accent hover:underline">Logs</a> with a branch link.
+              <b> in progress</b>, then <b>done</b>, and a new entry appears in <a href="/logs" className="text-accent hover:underline">Logs</a> with what was done.
               Two runs never take the same item: Claude must claim it first, and a second claim is refused.
             </p>
           </Card>

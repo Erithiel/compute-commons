@@ -38,12 +38,12 @@ export default async function TaskPage({ params, searchParams }: PageProps<"/tas
             <form action={saveTask} className="space-y-4">
               <input type="hidden" name="id" value={task?.$id ?? ""} />
               <fieldset disabled={!lead} className="space-y-4">
-                <div><label className={label}>Title</label><input name="title" required defaultValue={task?.title} className={input} placeholder="e.g. Weekly dependency check" /></div>
+                <div><label className={label}>Title</label><input name="title" required defaultValue={task?.title} className={input} placeholder="e.g. Weekly competitor price check" /></div>
                 <div><label className={label}>Description (for people: why and what)</label><input name="description" defaultValue={task?.description} className={input} /></div>
                 <div>
                   <label className={label}>Prompt (what Claude will do; markdown). Use {"{{item}}"} for the current line of the item list.</label>
                   <textarea name="prompt" required rows={9} defaultValue={cur?.prompt} className={`${input} font-mono`}
-                    placeholder={"Check dependencies in {{item}}.\nList outdated and vulnerable packages. Write reports/deps.md; do not upgrade anything."} />
+                    placeholder={"Research {{item}} and write a one-page brief: what they do, likely needs, three ideas for a first call.\nSay where you saved it, or put it in the details."} />
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -60,17 +60,7 @@ export default async function TaskPage({ params, searchParams }: PageProps<"/tas
                 <div>
                   <label className={label}>Item list (optional): one per line. Each line is done and claimed separately, so nobody doubles up.</label>
                   <textarea name="items" rows={4} defaultValue={task?.items.join("\n")} className={`${input} font-mono`}
-                    placeholder={"https://site-one.ge\nhttps://site-two.ge\n(leave empty for a single job)"} />
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div><label className={label}>Needs (tools/keys, comma list)</label><input name="requires" defaultValue={task?.requires.join(", ")} className={input} placeholder="gh, node" /></div>
-                  <div><label className={label}>Risk</label>
-                    <select name="riskLabel" defaultValue={cur?.riskLabel ?? "report-only"} className={input}>
-                      <option value="report-only">report-only (reads, writes a report)</option>
-                      <option value="changes-files">changes-files (edits code)</option>
-                    </select>
-                  </div>
+                    placeholder={"Acme Logistics\nGreen Cafe\n(leave empty for a single job)"} />
                 </div>
                 {lead && <button className={btnPrimary}>{isNew ? "Create task" : "Save"}</button>}
               </fieldset>
@@ -129,8 +119,7 @@ export default async function TaskPage({ params, searchParams }: PageProps<"/tas
                         <span className="text-xs text-muted">{who(s, l.by)} · {fmt(l.finishedAt)}</span>
                         <Badge tone={tone[l.outcome]}>{l.outcome}</Badge>
                       </div>
-                      <p className="text-xs">{s.taskItems.find((i) => i.$id === l.taskItemId)?.item} {l.summary}{" "}
-                        {l.branchUrl && <a href={l.branchUrl} target="_blank" className="text-accent hover:underline">branch ↗</a>}</p>
+                      <p className="text-xs">{s.taskItems.find((i) => i.$id === l.taskItemId)?.item} {l.summary}</p>
                     </li>
                   ))}
                 </ul>
@@ -150,7 +139,7 @@ export default async function TaskPage({ params, searchParams }: PageProps<"/tas
                         </form>
                       )}
                     </div>
-                    <p className="text-xs text-muted">{who(s, v.authorId)} · {fmt(v.createdAt)} · {v.riskLabel}</p>
+                    <p className="text-xs text-muted">{who(s, v.authorId)} · {fmt(v.createdAt)}</p>
                     <details className="mt-1"><summary className="cursor-pointer text-xs text-accent">prompt</summary>
                       <pre className="mt-1 whitespace-pre-wrap rounded bg-hover p-2 font-mono text-xs">{v.prompt}</pre>
                     </details>

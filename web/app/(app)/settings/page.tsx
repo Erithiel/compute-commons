@@ -17,7 +17,7 @@ export default async function SettingsPage() {
           <form action={saveSettings} className="space-y-3">
             <fieldset disabled={!lead} className="space-y-3">
               <div>
-                <label className={label}>Team policy: placed before every task prompt. Put the client&apos;s branching strategy here.</label>
+                <label className={label}>Team policy: rules placed before every task prompt (e.g. how to deliver results, what never to touch).</label>
                 <textarea name="policy" rows={5} defaultValue={s.settings.policy} className={`${input} font-mono`} />
               </div>
               <div className="grid grid-cols-2 gap-3">

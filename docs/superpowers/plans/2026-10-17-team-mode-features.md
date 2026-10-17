@@ -28,7 +28,7 @@ A clickable **mock UI** exists in `web/` and is the starting point for every fea
 ## Global Constraints
 
 - Team mode only. Clan mode is parked; do not build trust ladders or security-checker roles.
-- Results land on git branches following the client's branching strategy (set in the team policy, see `DECISIONS.md` D15); nothing in our system writes to `main` of a repo.
+- Tasks are not only about code. Our system never assumes git, branches, PRs or files: where and how a result is delivered is written in the task prompt or the team policy, and Claude reports it back as free text in the log. (A code task's prompt can say "commit on a new branch, never main".)
 - The browser never talks to Appwrite directly in v1. All data access is server-side with the API key, after a role check.
 - Roles: `lead` and `member` only (permission table in `IDEA.md` §7).
 - Task prompt edits create a new immutable version. Unattended (schedule) runs only take tasks with an approved version, and run that version.
@@ -95,7 +95,6 @@ Everyone codes against these names. If one must change, change it in one PR and 
 
 ```ts
 export type Role = "lead" | "member";
-export type RiskLabel = "report-only" | "changes-files";
 export type TaskMode = "once" | "routine";
 export type ItemStatus = "available" | "done" | "failed" | "skipped";
 export type Outcome = "done" | "failed" | "skipped";
@@ -109,13 +108,12 @@ export interface Task {
   $id: string; teamId: string; title: string; description: string;
   mode: TaskMode; redoDays: number;      // routine: comes back after redoDays; once: 0
   items: string[];                       // optional list; [] = the task is a single item
-  requires: string[];                    // tools/keys the run needs, e.g. ["gh", "node"]
   priority: number;
   currentVersion: number; approvedVersion: number | null;
 }
 export interface TaskVersion {
   $id: string; taskId: string; version: number; prompt: string; // markdown, may use {{item}}
-  riskLabel: RiskLabel; authorId: string; createdAt: string;
+  authorId: string; createdAt: string;
 }
 export interface TaskItem {              // the unit of work and of claiming
   $id: string; teamId: string; taskId: string; item: string; // "" when the task has no list
@@ -124,7 +122,8 @@ export interface TaskItem {              // the unit of work and of claiming
 export interface Claim { $id: string /* = taskItemId */; by: string /* memberId or "team" */; claimedAt: string; leaseUntil: string }
 export interface Log {
   $id: string; taskItemId: string; taskId: string; by: string; outcome: Outcome; summary: string;
-  branchUrl: string | null; version: number; startedAt: string; finishedAt: string;
+  details: string | null;                // free text from Claude: what it did, where the result is (link, file, branch…), notes
+  version: number; startedAt: string; finishedAt: string;
 }
 export interface Settings { $id: string; teamId: string; policy: string; maxItemsPerRun: number; maxMinutesPerRun: number }
 export interface ApiToken { $id: string; owner: string /* memberId or "team" */; name: string; tokenHash: string; lastUsedAt: string | null; revoked: boolean }
@@ -142,7 +141,7 @@ Notes: `teamId` is a constant from env in v1 (`TEAM_ID`). The only blank in v1 i
 | `web/lib/auth.ts` | F1 (stub in F0) | `getMember(): Promise<Member \| null>`, `requireMember(): Promise<Member>`, `requireLead(): Promise<Member>` (throw `Forbidden`) |
 | `web/lib/tasks.ts` | F2 | `nextVersion(current: number): number`, `parseItems(text: string): string[]`, `ensureItems(taskId: string, items: string[]): Promise<number>` (rows created) |
 | `web/lib/prompt.ts` | F3 | `fillBlanks(template: string, values: Record<string,string>): { text: string; missing: string[] }`, `buildPrompt(p: { teamPolicy: string; taskPrompt: string; values: Record<string,string> }): { text: string; missing: string[] }` |
-| `web/lib/claims.ts` | F4 | `isEligible(item: TaskItem, claim: Claim \| null, now: Date, redoDays: number): boolean`, `claim(itemId: string, by: string, leaseMinutes?: number): Promise<{ ok: true; leaseUntil: string } \| { ok: false; reason: "taken" \| "not-found" }>`, `heartbeat(itemId: string, by: string, leaseMinutes?: number): Promise<{ ok: boolean; leaseUntil?: string }>`, `finish(itemId: string, by: string, outcome: "done" \| "failed", data: { summary: string; branchUrl?: string; version: number }): Promise<Log>` (startedAt = the claim's `claimedAt`), `recordSkip(itemId: string, by: string, reason: string, version: number): Promise<Log>` |
+| `web/lib/claims.ts` | F4 | `isEligible(item: TaskItem, claim: Claim \| null, now: Date, redoDays: number): boolean`, `claim(itemId: string, by: string, leaseMinutes?: number): Promise<{ ok: true; leaseUntil: string } \| { ok: false; reason: "taken" \| "not-found" }>`, `heartbeat(itemId: string, by: string, leaseMinutes?: number): Promise<{ ok: boolean; leaseUntil?: string }>`, `finish(itemId: string, by: string, outcome: "done" \| "failed", data: { summary: string; details?: string; version: number }): Promise<Log>` (startedAt = the claim's `claimedAt`), `recordSkip(itemId: string, by: string, reason: string, version: number): Promise<Log>` |
 | `web/lib/work.ts` | F4 | `sortWork(rows)`, `listEligible(opts: { approvedOnly: boolean; limit?: number }): Promise<Array<{ item: TaskItem; task: Task; lastLog: Log \| null }>>` |
 | `web/lib/tokens.ts` | F5 | `createToken(owner: string /* memberId or "team" */, name: string): Promise<{ token: string; row: ApiToken }>`, `verifyBearer(header: string \| null): Promise<Caller \| null>`, `revokeToken(id: string): Promise<void>` |
 
@@ -208,8 +207,8 @@ SESSION_COOKIE_NAME=commons_session
 **Depends on:** F0 (uses `requireLead`, stubbed until F1).
 **Files:** `web/app/(app)/tasks/page.tsx`, `web/app/(app)/tasks/[id]/page.tsx`, `web/app/(app)/tasks/actions.ts`, `web/lib/tasks.ts`, `web/lib/__tests__/tasks.test.ts`.
 
-- **List:** title, one-off/routine (with "every N days"), number of items and how many are done, current and approved version, risk label.
-- **Editor (lead):** title, description, prompt (textarea, markdown), mode (one-off / routine + redo after N days), item list (textarea, one per line, optional), `requires` (comma list), risk label, priority.
+- **List:** title, one-off/routine (with "every N days"), number of items and how many are done, current and approved version.
+- **Editor (lead):** title, description, prompt (textarea, markdown), mode (one-off / routine + redo after N days), item list (textarea, one per line, optional), priority. No code-specific fields (D17): tools needed, risk, and where to deliver the result all go in the prompt.
 - **Save** = a new `task_versions` row with `version = currentVersion + 1`, update the task, and `ensureItems` for the item list (a task with no list gets one item `""`). Versions are never edited. Removing a line from the list does not delete its item or its logs (it stops being offered; see §6).
 - **Approve (lead):** sets `approvedVersion`. Version history shows each version with a plain line diff against the previous one. Schedules only take approved tasks.
 - **Preview:** pick one item and see the full prompt Claude will get (`buildPrompt` from F3: team policy + task prompt with `{{item}}` filled).
@@ -240,13 +239,13 @@ describe("tasks", () => {
 
 - `fillBlanks` replaces `{{ name }}` (spaces allowed) with values; unknown blanks stay as-is and are listed in `missing`.
 - `buildPrompt` joins the non-empty team policy and task prompt with a separator line, then fills blanks once over the whole text. Values in v1: `{ item }`.
-- Settings page (lead): edit the team policy, including the client's branching strategy (D15), and the per-run budget (`maxItemsPerRun`, `maxMinutesPerRun`) that `list_work` returns to schedules. Default policy:
+- Settings page (lead): edit the team policy (rules placed before every task prompt, e.g. how to deliver results, what never to touch; for code teams this is where the branching strategy goes, D15) and the per-run budget (`maxItemsPerRun`, `maxMinutesPerRun`) that `list_work` returns to schedules. Default policy:
 
 ```
 Rules for every task:
-- Work in a fresh clone. Branching: a new branch per task named commons/<task>-<date>. Never push to main.
-- Use no secrets and do not read files outside the working folder.
-- Finish by calling complete (summary + branch URL) or fail (reason).
+- Use no secrets and do not touch anything the task does not ask for.
+- If the task is unclear or needs a human decision, stop and call fail with the reason.
+- Finish by calling complete with a short summary and details (what you did, where the result is, anything a human should know).
 ```
 
 Test:
@@ -357,9 +356,9 @@ export const MCP_INSTRUCTIONS = [
   "This server hands out team tasks. To work on them:",
   "1. Call list_work. It returns the items you may take and this run's budget.",
   "2. Take items in the order given. Call claim; if it is taken, move to the next one.",
-  "3. Call get_task for the claimed item and follow the instructions it returns exactly, including the branching strategy. Never push to main.",
+  "3. Call get_task for the claimed item and follow the instructions it returns exactly.",
   "4. On long items, call heartbeat at least every 30 minutes.",
-  "5. Finish each item with complete (summary + branch URL), fail (reason), or skip (reason).",
+  "5. Finish each item with complete (a short summary, and details: what you did, where the result is, anything a human should know), fail (reason), or skip (reason).",
   "6. Stop when list_work is empty or the budget is used up.",
 ].join("\n");
 
@@ -381,11 +380,11 @@ it("keeps the pasted prompt to one line and the workflow on the server", () => {
 | Tool | Input | Returns |
 |---|---|---|
 | `list_work` | `{ limit?: number }` | eligible items: item id, task title, item text, last log, suggested order; plus `budget: { maxItems, maxMinutes }` from settings |
-| `get_task` | `{ itemId: string }` | merged prompt via `buildPrompt` (approved version for `team` callers, current for members), `missing`, `requires`, `riskLabel`, version |
+| `get_task` | `{ itemId: string }` | merged prompt via `buildPrompt` (approved version for `team` callers, current for members), `missing`, version |
 | `claim` | `{ itemId: string }` | `{ ok, leaseUntil }` or `{ ok: false, reason }` |
 | `heartbeat` | `{ itemId: string }` | `{ ok, leaseUntil }` |
-| `complete` | `{ itemId: string, summary: string, branchUrl: string }` | log id (via `finish(..., "done", ...)`) |
-| `fail` | `{ itemId: string, reason: string }` | log id (via `finish(..., "failed", ...)`) |
+| `complete` | `{ itemId: string, summary: string, details?: string }` | log id (via `finish(..., "done", ...)`) |
+| `fail` | `{ itemId: string, reason: string, details?: string }` | log id (via `finish(..., "failed", ...)`) |
 | `skip` | `{ itemId: string, reason: string }` | log id (via `recordSkip`, claim not required) |
 | `board` | `{}` | counts and current claims |
 
@@ -412,25 +411,25 @@ it("creates prefixed tokens and stable hashes", () => {
 **Depends on:** F2, F4.
 **Files:** `web/app/(app)/board/page.tsx`, `web/app/(app)/board/components/*`, `web/app/(app)/logs/page.tsx`.
 
-- **Board:** grouped by task. Each row is one item: item text (or the task title when there is no list), status badge (free / claimed by X until HH:MM / done on date / failed / skipped), last log summary, branch link. Filters: task, status. Refresh button (realtime is a later feature).
+- **Board:** grouped by task. Each row is one item: item text (or "Whole task" when there is no list), status badge (free / in progress by X until HH:MM / done on date / failed / skipped), the last log's summary. Filters: task, status. Refresh button (realtime is a later feature).
 - **Quick add (lead):** a one-line "Add task" bar (title + prompt) for a one-off job without opening the editor.
 - **Lead actions:** release a stuck claim (deletes the claim, audited), reset an item to available.
-- **Logs page:** every log, newest first: who, when, task, item, outcome, summary, branch link. Filter by task and by person. The task page (F2) shows the same list for one task.
+- **Logs page (who executed what):** a table, newest first: finished at, executed by (person or Claude schedule), task + item + summary, result, duration (finished − started). Clicking a row expands `details` (what Claude did, where the result is, notes), start/finish times and the prompt version. Filter by task, person and result. The task page (F2) shows the same list for one task.
 - Remove the mock-only Claim / Complete / Fail / Skip buttons once F5 lands; real claims come from Claude through MCP.
 
-**Acceptance:** a claim made through MCP shows within one refresh; releasing it frees the item; a completed item's log appears on the Logs page with its branch link.
+**Acceptance:** a claim made through MCP shows within one refresh; releasing it frees the item; a completed item's log appears on the Logs page with its details.
 
 ### F7 — Demo: one real schedule end to end
 
 **Depends on:** all.
 
-- [ ] Write a real task (for example the Rando SEO audit, or adding a skill to every site) with an item list of 3–5 entries, and approve it. Check its `requires` against what a Claude schedule's cloud workspace has.
+- [ ] Write a real task (for example a client brief for each lead, or the Rando SEO skill on every site) with an item list of 3–5 entries, and approve it. Check that what the prompt needs exists where a Claude schedule runs.
 - [ ] Follow `/setup`: team token, connector (request headers if available, see `TECH.md` §6; otherwise the agreed fallback), and the one-line prompt in a Claude scheduled task.
-- [ ] Trigger a run, watch the board, open the result branches and the logs.
+- [ ] Trigger a run, watch the board, read the results in Logs.
 - [ ] Run a teammate's own Claude Code session at the same time to show no double work.
 - [ ] Record the demo and note anything that broke as issues.
 
-**Acceptance:** at least 3 items done by the schedule with branches linked in the logs, and one collision prevented on camera.
+**Acceptance:** at least 3 items done by the schedule with their results in the logs, and one collision prevented on camera.
 
 ---
 
@@ -445,8 +444,8 @@ GitHub sign-in (Appwrite OAuth) · OAuth for the MCP endpoint (Better Auth MCP p
 | Does our claude.ai organization have connector request headers? | F5, F7 | Build header auth; decide the fallback before F7. |
 | Should a schedule take every approved task, or only some (e.g. only routine tasks, or a tag)? | F4, F5 | Every approved task. Add a tag filter later if two schedules need different work. |
 | Who may write tasks: lead only or members too? | F2 | Lead edits, members suggest. |
-| Results only as branches, or also comments/report pages? | F5 `complete` | Branch URL + summary in the log. |
-| Which branching strategies do we offer, and where is the choice set? | F3 settings | Free text in the team policy (default: branch per task). No dedicated field in v1. |
+| Where do results go? | F5 `complete` | Wherever the task prompt says; Claude reports a summary + free-text details (links included) in the log. |
+| For code tasks: which branching strategy? | F3 settings | Free text in the team policy or the task prompt (D15). No field. |
 | How long is a lease? | F4 | 120 minutes; `MCP_INSTRUCTIONS` tell Claude to heartbeat every 30. |
 | What happens to an item removed from a task's list? | F2 | Kept with its logs but no longer offered (mark it `skipped` with reason "removed from list"). |
 | Exact steps to add a custom connector with request headers in Claude (menu path, where headers go). | F5 `/setup` guide, F7 | Guide says "Settings → Connectors"; verify against Claude's docs and our organization before F7. |

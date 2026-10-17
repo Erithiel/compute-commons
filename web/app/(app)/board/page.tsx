@@ -74,8 +74,7 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
                       </Badge>
                       {log && !claim && (
                         <p className="mt-1 text-xs text-muted">
-                          {who(s, log.by)}: {log.summary}{" "}
-                          {log.branchUrl && <a href={log.branchUrl} className="text-accent hover:underline" target="_blank">branch ↗</a>}
+                          {who(s, log.by)}: {log.summary}
                         </p>
                       )}
                     </div>
