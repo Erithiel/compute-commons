@@ -161,6 +161,8 @@ compute-commons/
 
 ## 11. Build order for the hackathon
 
+> Detailed feature plan with dependencies, branches and shared contracts: `docs/superpowers/plans/2026-10-17-team-mode-features.md`.
+
 1. **Setup:** Next.js app in `web/`, Tailwind + shadcn, Appwrite project, `setup-appwrite.ts` creates the tables.
 2. **Claim logic first:** `lib/claims.ts` with a vitest test, and one manual race test against the real 1.8.1 server (two claims at once, an expired lease).
 3. **MCP endpoint:** the eight tools with token auth. Test with the MCP Inspector and with `claude mcp add` from a laptop.
