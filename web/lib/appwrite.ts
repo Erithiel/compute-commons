@@ -21,6 +21,9 @@ function admin() {
 export const adminTables = () => new TablesDB(admin());
 export const adminUsers = () => new Users(admin());
 
+/** Account service with the API key: only for createEmailPasswordSession (it returns the session secret only to an API key). */
+export const adminAccount = () => new Account(admin());
+
 export async function sessionAccount(): Promise<Account | null> {
   const secret = (await cookies()).get(process.env.SESSION_COOKIE_NAME ?? "commons_session")?.value;
   return secret ? new Account(base().setSession(secret)) : null;
@@ -58,4 +61,10 @@ export async function rowOrNull<R>(table: string, id: string): Promise<R | null>
     if (isCode(e, 404)) return null;
     throw e;
   }
+}
+
+/** A row that belongs to this team, or null (a row of another team counts as missing). */
+export async function teamRow<R extends { teamId: string }>(table: string, id: string, teamId: string): Promise<R | null> {
+  const r = await rowOrNull<R>(table, id);
+  return r?.teamId === teamId ? r : null;
 }
