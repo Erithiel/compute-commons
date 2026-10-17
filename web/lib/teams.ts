@@ -1,7 +1,7 @@
 // Teams, memberships and invites. Checks that need the database live here; pure rules are in team-rules.ts.
 import "server-only";
 import { ID, Query } from "node-appwrite";
-import { adminTables, allRows, DB_ID, isCode, T, teamRow } from "./appwrite";
+import { adminTables, allRows, DB_ID, isCode, rowOrNull, T, teamRow } from "./appwrite";
 import { audit } from "./audit";
 import { DEFAULT_POLICY } from "./tables";
 import { hashCode, INVITE_DAYS, inviteProblem, leadProblem, newInviteCode } from "./team-rules";
@@ -17,9 +17,18 @@ export async function createTeam(user: User, name: string): Promise<string> {
   const teamId = ID.unique();
   const member = { teamId, userId: user.$id, name: user.name || user.email, role: "lead" as const };
   const row = await db().createRow(DB_ID, T.members, ID.unique(), member); // 409 → already in a team (caller shows ALREADY)
-  await db().createRow(DB_ID, T.teams, teamId, { name: name.trim(), createdBy: user.$id, createdAt: now() });
-  await db().createRow(DB_ID, T.settings, teamId, { teamId, policy: DEFAULT_POLICY });
-  await audit(teamId, row.$id, "team.create", teamId, undefined, { name });
+  let teamMade = false;
+  try {
+    await db().createRow(DB_ID, T.teams, teamId, { name: name.trim(), createdBy: user.$id, createdAt: now() });
+    teamMade = true;
+    await db().createRow(DB_ID, T.settings, teamId, { teamId, policy: DEFAULT_POLICY });
+  } catch (e) {
+    // Undo the half-made team, or the unique userId index leaves the user stuck as lead of nothing.
+    if (teamMade) await db().deleteRow(DB_ID, T.teams, teamId).catch(() => {});
+    await db().deleteRow(DB_ID, T.members, row.$id).catch(() => {});
+    throw e;
+  }
+  await audit(teamId, row.$id, "team.create", teamId, undefined, { name: name.trim() });
   return teamId;
 }
 
@@ -37,7 +46,8 @@ export async function createInvite(lead: Member, role: Role) {
 export async function findInvite(code: string) {
   const [invite] = await allRows<Invite>(T.invites, [Query.equal("codeHash", hashCode(code))]);
   if (!invite) return null;
-  const team = (await db().getRow(DB_ID, T.teams, invite.teamId)) as unknown as Team;
+  const team = await rowOrNull<Team>(T.teams, invite.teamId); // null when the team row is gone (404)
+  if (!team) return null;
   return { invite, team };
 }
 
@@ -77,10 +87,11 @@ export async function removeMember(actor: Member, memberId: string): Promise<str
   const problem = leadProblem(members, memberId, "remove");
   if (problem) return problem;
   const target = members.find((m) => m.$id === memberId)!;
+  // Tokens first: if this stops midway, the member row still exists and the action can be retried.
+  const tokens = await allRows<{ $id: string }>(T.apiTokens, [Query.equal("owner", memberId), Query.equal("teamId", actor.teamId)]);
+  for (const t of tokens) await db().updateRow(DB_ID, T.apiTokens, t.$id, { revoked: true });
   await db().deleteRow(DB_ID, T.members, memberId);
-  for (const t of await allRows<{ $id: string }>(T.apiTokens, [Query.equal("owner", memberId)]))
-    await db().updateRow(DB_ID, T.apiTokens, t.$id, { revoked: true });
-  await audit(actor.teamId, actor.$id, actor.$id === memberId ? "member.leave" : "member.remove", memberId, target);
+  await audit(actor.teamId, actor.$id, actor.$id === memberId ? "member.leave" : "member.remove", memberId, target, { tokensRevoked: tokens.length });
   return null;
 }
 
