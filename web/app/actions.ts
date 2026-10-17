@@ -4,18 +4,17 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { ID } from "node-appwrite";
-import { adminTables, DB_ID, rowOrNull, T, TEAM_ID } from "@/lib/appwrite";
+import { rowOrNull, T } from "@/lib/appwrite";
 import { audit } from "@/lib/audit";
 import { requireLead, requireMember } from "@/lib/auth";
-import { saveNote, saveTask as saveTaskRow } from "@/lib/tasks";
+import { rowText, saveNote, saveTask as saveTaskRow } from "@/lib/tasks";
+import * as team from "@/lib/team";
 import { createToken as newToken, revokeToken as revoke } from "@/lib/tokens";
-import type { ApiToken, Member, Role, Settings } from "@/lib/types";
+import type { ApiToken, Role } from "@/lib/types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const role = (f: FormData): Role => (str(f, "role") === "lead" ? "lead" : "member");
 const done = () => revalidatePath("/", "layout");
-const db = () => adminTables();
 
 // --- Auth (F1 replaces this mock login with Appwrite sessions) ---
 export async function signIn(f: FormData) {
@@ -32,6 +31,7 @@ export async function signOut() {
 export async function saveTask(f: FormData) {
   const lead = await requireLead();
   const every = str(f, "repeat") === "every";
+  const cells = f.getAll("items").map((v) => { try { return (JSON.parse(String(v)) as unknown[]).map(String); } catch { return [String(v)]; } });
   const { task, created, newVersion } = await saveTaskRow(str(f, "id") || null, {
     title: str(f, "title"),
     prompt: String(f.get("prompt") ?? ""),
@@ -40,7 +40,8 @@ export async function saveTask(f: FormData) {
     repeatFor: every ? Math.max(0, Number(str(f, "repeatFor")) || 0) * (Number(str(f, "repeatForUnit")) || 1) : 0,
     assignees: f.getAll("assignees").map(String),
     columns: f.getAll("columns").map(String),
-    rows: f.getAll("items").map((v) => { try { return (JSON.parse(String(v)) as unknown[]).map(String); } catch { return [String(v)]; } }),
+    rows: cells.map(rowText),
+    cells,
   }, lead.$id);
   if (created && str(f, "myNote")) await saveNote(task.$id, lead.$id, String(f.get("myNote")));
   await audit(lead.$id, created ? "task.create" : "task.edit", task.$id, undefined, { title: task.title, version: task.currentVersion, newVersion });
@@ -61,42 +62,30 @@ export async function suggestChange(f: FormData) {
 /** Board quick-add: a once / anyone task with just a title and a prompt. */
 export async function quickTask(f: FormData) {
   const lead = await requireLead();
-  const { task } = await saveTaskRow(null, { title: str(f, "title"), prompt: String(f.get("prompt") ?? ""), repeatDays: 0, repeatFor: 0, assignees: [], columns: [], rows: [] }, lead.$id);
+  const { task } = await saveTaskRow(null, { title: str(f, "title"), prompt: String(f.get("prompt") ?? ""), repeatDays: 0, assignees: [], rows: [] }, lead.$id);
   await audit(lead.$id, "task.create", task.$id, undefined, { title: task.title });
   done();
 }
 
-// --- Settings: policy (F3), members (F1), tokens (F5) ---
+// --- Settings: policy (F3), members (F1), tokens (F5). Member and policy writes live in lib/team.ts (shared with MCP). ---
 export async function saveSettings(f: FormData) {
   const lead = await requireLead();
-  const before = await rowOrNull<Settings>(T.settings, "settings");
-  const policy = String(f.get("policy") ?? "").replaceAll("\r\n", "\n").trim();
-  await db().upsertRow(DB_ID, T.settings, "settings", { teamId: TEAM_ID, policy });
-  await audit(lead.$id, "settings.edit", "settings", before?.policy, policy);
+  await team.savePolicy(lead.$id, String(f.get("policy") ?? ""));
   done();
 }
-// ponytail: members without Appwrite users until F1 (invite by email, first-lead bootstrap).
 export async function addMember(f: FormData) {
   const lead = await requireLead();
-  const m = { teamId: TEAM_ID, userId: ID.unique(), name: str(f, "name"), role: role(f) };
-  const row = await db().createRow(DB_ID, T.members, ID.unique(), m);
-  await audit(lead.$id, "member.add", row.$id, undefined, m);
+  await team.addMember(lead.$id, str(f, "name"), role(f));
   done();
 }
 export async function setRole(f: FormData) {
   const lead = await requireLead();
-  const m = await rowOrNull<Member>(T.members, str(f, "id"));
-  if (!m) return;
-  await db().updateRow(DB_ID, T.members, m.$id, { role: role(f) });
-  await audit(lead.$id, "member.role", m.$id, m.role, role(f));
+  await team.setRole(lead.$id, str(f, "id"), role(f));
   done();
 }
 export async function removeMember(f: FormData) {
   const lead = await requireLead();
-  const m = await rowOrNull<Member>(T.members, str(f, "id"));
-  if (!m || m.$id === lead.$id) return; // a lead cannot remove themselves (would lock the team out)
-  await db().deleteRow(DB_ID, T.members, m.$id); // their tokens stop working: verifyBearer needs the member row
-  await audit(lead.$id, "member.remove", m.$id, m);
+  await team.removeMember(lead.$id, str(f, "id"));
   done();
 }
 /** Returns the raw token once; only its hash is stored. The token always belongs to the caller. */

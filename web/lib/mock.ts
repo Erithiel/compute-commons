@@ -7,7 +7,7 @@ import { connection } from "next/server";
 import { Query } from "node-appwrite";
 import { allRows, rowOrNull, T, TEAM_ID } from "./appwrite";
 import { canTake, isActive } from "./claims";
-import { buildPrompt } from "./prompt";
+import { buildPrompt, itemPrompt } from "./prompt";
 import { DEFAULT_POLICY } from "./tables";
 import type { ApiToken, AuditEntry, Claim, Log, Member, MemberNote, Settings, Task, TaskItem, TaskVersion } from "./types";
 
@@ -18,9 +18,8 @@ export type Store = {
 
 const team = [Query.equal("teamId", TEAM_ID)];
 
-/** Await before reading: marks the render as request-time (cacheComponents is on). Loaded once per request (layout + page share it). */
-export const db = cache(async (): Promise<Store> => {
-  await connection();
+/** One snapshot of the team's data. MCP tools and scripts call this; pages use db() below. */
+export async function loadStore(): Promise<Store> {
   const [members, tasks, taskVersions, taskItems, memberNotes, claims, logs, settings, apiTokens, audit] = await Promise.all([
     allRows<Member>(T.members, team),
     allRows<Task>(T.tasks, [...team, Query.orderAsc("$createdAt")]),
@@ -37,12 +36,26 @@ export const db = cache(async (): Promise<Store> => {
     members, tasks, taskVersions, taskItems, memberNotes, claims, logs, apiTokens, audit,
     settings: settings ?? { $id: "settings", teamId: TEAM_ID, policy: DEFAULT_POLICY },
   };
+}
+
+/** Await before reading: marks the render as request-time (cacheComponents is on). Loaded once per request (layout + page share it). */
+export const db = cache(async (): Promise<Store> => {
+  await connection();
+  return loadStore();
 });
 
 export { buildPrompt, canTake, DEFAULT_POLICY };
 
 export const noteOf = (s: Store, taskId: string, memberId: string) =>
   s.memberNotes.find((n) => n.taskId === taskId && n.memberId === memberId)?.text ?? "";
+
+/** The prompt of the version in use (every run uses the latest). */
+export const promptOf = (s: Store, task: Task) =>
+  s.taskVersions.find((v) => v.taskId === task.$id && v.version === task.currentVersion)?.prompt ?? "";
+
+/** Exactly what this member's Claude receives for the item: policy, prompt, their own note, the row. */
+export const claudePrompt = (s: Store, task: Task, item: TaskItem, memberId: string) =>
+  buildPrompt(s.settings.policy, promptOf(s, task), noteOf(s, task.$id, memberId), itemPrompt(item));
 
 export { MCP_INSTRUCTIONS, SETUP_PROMPT } from "./mcp/instructions";
 
