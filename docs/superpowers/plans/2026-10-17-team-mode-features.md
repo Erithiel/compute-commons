@@ -19,6 +19,7 @@ A **task** is a **title and a prompt**. The prompt can ask for anything; our app
 A clickable **mock UI** exists in `web/` and already follows this plan:
 - Pages: Board (read-only), Tasks (list + editor with a rows table), Logs, Connect Claude (`/setup`), Settings, Login. Data comes from an in-memory store, `web/lib/mock.ts`, which resets on restart. Mock server actions are in `web/app/actions.ts`. `web/lib/types.ts` matches §3.1.
 - **Backend is live (2026-10-17):** `npm run setup:appwrite` created the schema; `lib/tasks.ts`, `lib/claims.ts`, `lib/tokens.ts`, `lib/prompt.ts`, `lib/audit.ts` are implemented with tests; `app/actions.ts` writes to Appwrite; `lib/mock.ts` no longer holds data, it loads a per-request snapshot from Appwrite and keeps the page helpers (rename to `lib/data.ts` once the UI rework settles). Login is still the mock member picker (F1). `TEAM_ID=race-test npm run race-test` passes on 1.8.1.
+- **MCP endpoint is live:** `/api/mcp` with worker and management tools (plan: `docs/superpowers/plans/2026-10-17-mcp-server.md`); `TEAM_ID=mcp-smoke npm run mcp-smoke` passes against a dev server started with the same `TEAM_ID`.
 - **How a feature replaces the mock:** keep the page, swap its data calls and actions for Appwrite, move its actions into the feature's own `actions.ts`, and delete its slice of `mock.ts`. When `mock.ts` is empty, delete it and the "mock data" badge in the sidebar.
 - **Pages use route groups:** `web/app/(app)/<page>` for signed-in pages, sharing the sidebar layout and auth guard, and `web/app/(auth)/login`.
 - **Appwrite is connected:** project `hakatoni` (`6ad3926b000731cc9576`) on api.rando.ge. The sidebar pings it on every load. `node-appwrite` is pinned to **22.1.3**, the last SDK built for API 1.8.1; its `ping()` returns `{ message: "Pong!" }`, not a string. An API key is still needed in `web/.env.local`.
@@ -337,7 +338,7 @@ it("orders never-done first, then oldest done", () => {
 ### F5 — MCP endpoint + tokens + Connect Claude
 
 **Depends on:** F1, F2, F3, F4.
-**Files:** `web/app/api/[transport]/route.ts`, `web/lib/tokens.ts`, `web/lib/mcp/tools.ts`, `web/lib/mcp/instructions.ts`, `web/lib/__tests__/tokens.test.ts`, `web/lib/__tests__/instructions.test.ts`, `web/app/(app)/setup/page.tsx`, `web/app/(app)/settings/tokens/*`.
+**Files:** `web/app/api/mcp/route.ts`, `web/lib/tokens.ts`, `web/lib/mcp/work.ts`, `web/lib/mcp/manage.ts`, `web/lib/mcp/reply.ts`, `web/lib/mcp/instructions.ts`, `web/lib/__tests__/tokens.test.ts`, `web/lib/__tests__/instructions.test.ts`, `web/app/(app)/setup/page.tsx`, `web/app/(app)/settings/tokens/*`.
 
 - **Connect Claude page (`/setup`)**, the one-time setup, in four steps:
   1. Create a token (shown once). It belongs to the member who creates it; they choose **for my Claude schedule** (`scheduled: true`, logged as "Nino · scheduled") or **for my own Claude Code sessions**. Work always uses that person's own Claude limit.
