@@ -10,7 +10,7 @@ const project = process.env.APPWRITE_PROJECT_ID!;
 export const DB_ID = process.env.APPWRITE_DATABASE_ID ?? "commons";
 export const TEAM_ID = process.env.TEAM_ID ?? "rando";
 export const T = {
-  members: "members", tasks: "tasks", taskVersions: "task_versions", taskItems: "task_items",
+  members: "members", tasks: "tasks", taskVersions: "task_versions", taskItems: "task_items", memberNotes: "member_notes",
   claims: "claims", logs: "logs", settings: "settings", apiTokens: "api_tokens", audit: "audit_log",
 } as const;
 

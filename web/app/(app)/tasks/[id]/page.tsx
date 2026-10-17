@@ -1,14 +1,18 @@
 import { notFound } from "next/navigation";
 import { requireMember } from "@/lib/auth";
-import { activeClaim, buildPrompt, db, who } from "@/lib/mock";
-import { saveTask, suggestChange } from "@/app/actions";
+import { buildPrompt, db, itemState, itemsOf, noteOf, who } from "@/lib/mock";
+import { saveMyNote, saveTask, suggestChange } from "@/app/actions";
+import { ItemsTable } from "@/components/client";
 import { Badge, Card, LeadOnly, PageHeader, btn, btnPrimary, fmt, input, label, type Tone } from "@/components/ui";
 
-const tone: Record<string, Tone> = { available: "gray", done: "green", failed: "red", skipped: "amber" };
+const tone: Record<string, Tone> = { free: "gray", "in progress": "blue", done: "green", failed: "red", skipped: "amber" };
+const text: Record<string, string> = {
+  free: "text-muted", "in progress": "text-blue-600 dark:text-blue-400", done: "text-green-700 dark:text-green-400",
+  failed: "text-red-600 dark:text-red-400", skipped: "text-amber-700 dark:text-amber-400",
+};
 
-export default async function TaskPage({ params, searchParams }: PageProps<"/tasks/[id]">) {
+export default async function TaskPage({ params }: PageProps<"/tasks/[id]">) {
   const { id } = await params;
-  const { preview } = (await searchParams) as { preview?: string };
   const me = await requireMember();
   const s = await db();
   const isNew = id === "new";
@@ -18,76 +22,77 @@ export default async function TaskPage({ params, searchParams }: PageProps<"/tas
 
   const versions = s.taskVersions.filter((v) => v.taskId === id).sort((a, b) => b.version - a.version);
   const cur = versions[0];
-  const items = s.taskItems.filter((i) => i.taskId === id);
+  const items = task ? itemsOf(s, task.$id) : [];
+  const rows = items.filter((i) => i.text);
+  const single = items.length === 1 && !items[0].text ? itemState(s, items[0]) : null;
   const logs = s.logs.filter((l) => l.taskId === id);
-  const previewItem = preview ?? items[0]?.item ?? "";
-  const merged = cur && buildPrompt([s.settings.policy, cur.prompt], { item: previewItem });
+  const myNote = noteOf(s, id, me.$id);
 
   return (
     <>
-      <PageHeader title={task?.title ?? "New task"} sub={task?.description}>
-        {task && <Badge>prompt v{task.currentVersion}</Badge>}
+      <PageHeader title={task?.title ?? "New task"}>
+        {single && <Badge tone={tone[single.key]}>{single.label}</Badge>}
       </PageHeader>
 
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
         <div className="space-y-6">
-          <Card title={lead ? "What should be done" : "Task"} actions={!lead && <LeadOnly />}>
+          <Card title="Task" actions={!lead && <LeadOnly />}>
             <form action={saveTask} className="space-y-4">
               <input type="hidden" name="id" value={task?.$id ?? ""} />
               <fieldset disabled={!lead} className="space-y-4">
-                <div><label className={label}>Title</label><input name="title" required defaultValue={task?.title} className={input} placeholder="e.g. Weekly competitor price check" /></div>
-                <div><label className={label}>Description (for people: why and what)</label><input name="description" defaultValue={task?.description} className={input} /></div>
+                <div><label className={label}>Title</label><input name="title" required defaultValue={task?.title} className={input} /></div>
                 <div>
-                  <label className={label}>Prompt (what Claude will do; markdown). Use {"{{item}}"} for the current line of the item list.</label>
-                  <textarea name="prompt" required rows={9} defaultValue={cur?.prompt} className={`${input} font-mono`}
-                    placeholder={"Research {{item}} and write a one-page brief: what they do, likely needs, three ideas for a first call.\nSay where you saved it, or put it in the details."} />
+                  <label className={label}>Prompt: anything you want Claude to do</label>
+                  <textarea name="prompt" required rows={10} defaultValue={cur?.prompt} className={`${input} font-mono`} />
                 </div>
-
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div><label className={label}>Type</label>
-                    <select name="mode" defaultValue={task?.mode ?? "once"} className={input}>
-                      <option value="once">One-off (done once)</option>
-                      <option value="routine">Routine (comes back)</option>
-                    </select>
-                  </div>
-                  <div><label className={label}>Routine: redo after (days)</label><input name="redoDays" type="number" min={1} defaultValue={task?.redoDays || 7} className={input} /></div>
-                  <div><label className={label}>Priority (higher first)</label><input name="priority" type="number" defaultValue={task?.priority ?? 0} className={input} /></div>
-                </div>
-
                 <div>
-                  <label className={label}>Assigned to (only they can take it, by hand or from their Claude schedule; none ticked = anyone)</label>
-                  <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-md border border-line p-3 text-sm">
-                    {s.members.map((m) => ({ id: m.$id, name: m.name })).map((a) => (
-                      <label key={a.id} className="flex items-center gap-1.5">
-                        <input type="checkbox" name="assignees" value={a.id} defaultChecked={task?.assignees.includes(a.id)} /> {a.name}
+                  <label className={label}>Rows (optional): the same prompt for each row, e.g. a list of clients or sites. Each row is claimed separately, so nobody doubles up.</label>
+                  <ItemsTable editable={lead}
+                    initial={rows.map((i) => { const st = itemState(s, i); return { text: i.text, status: { label: st.label, tone: text[st.key] } }; })} />
+                </div>
+                <div className="flex flex-wrap items-center gap-4 text-sm">
+                  <span className="text-xs font-medium text-muted">Repeat</span>
+                  <label className="flex items-center gap-1.5"><input type="radio" name="repeat" value="once" defaultChecked={!task?.repeatDays} /> Once</label>
+                  <label className="flex items-center gap-1.5">
+                    <input type="radio" name="repeat" value="every" defaultChecked={!!task?.repeatDays} /> Every
+                    <input name="repeatDays" type="number" min={1} defaultValue={task?.repeatDays || 7} className={`${input} w-20`} /> days
+                  </label>
+                </div>
+                <div>
+                  <label className={label}>Assigned to (none ticked = anyone)</label>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                    {s.members.map((m) => (
+                      <label key={m.$id} className="flex items-center gap-1.5">
+                        <input type="checkbox" name="assignees" value={m.$id} defaultChecked={task?.assignees.includes(m.$id)} /> {m.name}
                       </label>
                     ))}
                   </div>
-                </div>
-
-                <div>
-                  <label className={label}>Item list (optional): one per line. Each line is done and claimed separately, so nobody doubles up.</label>
-                  <textarea name="items" rows={4} defaultValue={task?.items.join("\n")} className={`${input} font-mono`}
-                    placeholder={"Acme Logistics\nGreen Cafe\n(leave empty for a single job)"} />
                 </div>
                 {lead && <button className={btnPrimary}>{isNew ? "Create task" : "Save"}</button>}
               </fieldset>
             </form>
           </Card>
 
+          {task && (
+            <Card title="My note for this task">
+              <form action={saveMyNote} className="space-y-2">
+                <input type="hidden" name="id" value={task.$id} />
+                <textarea name="note" rows={3} defaultValue={myNote} className={`${input} font-mono`}
+                  placeholder={"Only your Claude gets this, e.g.\nMy client files are in D:\\work\\clients. Use the gdrive connector for spreadsheets."} />
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted">Added after the task prompt when <b>your</b> Claude fetches this task. Others never see it in their prompt.</p>
+                  <button className={btn}>Save note</button>
+                </div>
+              </form>
+            </Card>
+          )}
+
           {cur && (
-            <Card title="What Claude receives">
-              {items.some((i) => i.item) && (
-                <form className="mb-3 flex gap-2">
-                  <select name="preview" defaultValue={previewItem} className={input}>
-                    {items.map((i) => <option key={i.$id} value={i.item}>{i.item}</option>)}
-                  </select>
-                  <button className={btn}>Preview</button>
-                </form>
-              )}
-              <pre className="whitespace-pre-wrap rounded-md bg-hover p-3 font-mono text-xs">{merged!.text}</pre>
-              {merged!.missing.length > 0 && <p className="mt-2 text-xs text-red-600">Unfilled blanks: {merged!.missing.join(", ")}</p>}
-              <p className="mt-2 text-xs text-muted">Team policy (Settings) first, then this task&apos;s prompt.</p>
+            <Card title="What your Claude receives">
+              <pre className="whitespace-pre-wrap rounded-md bg-hover p-3 font-mono text-xs">{buildPrompt(s.settings.policy, cur.prompt, myNote, rows[0]?.text)}</pre>
+              <p className="mt-2 text-xs text-muted">
+                Team policy (Settings), then this prompt{myNote && ", then your note"}{rows.length > 0 && ", then the row Claude claimed (shown for the first row)"}.
+              </p>
             </Card>
           )}
 
@@ -104,20 +109,6 @@ export default async function TaskPage({ params, searchParams }: PageProps<"/tas
 
         {task && (
           <div className="space-y-6">
-            <Card title={`Items (${items.length})`}>
-              <ul className="divide-y divide-line text-sm">
-                {items.map((i) => {
-                  const c = activeClaim(s, i.$id);
-                  return (
-                    <li key={i.$id} className="flex items-center justify-between gap-2 py-1.5">
-                      <span className="truncate">{i.item || task.title}</span>
-                      <Badge tone={c ? "blue" : tone[i.status]}>{c ? `${who(s, c.by, c.scheduled)} on it` : i.status}</Badge>
-                    </li>
-                  );
-                })}
-              </ul>
-            </Card>
-
             <Card title="Log">
               {logs.length ? (
                 <ul className="divide-y divide-line text-sm">
@@ -127,7 +118,7 @@ export default async function TaskPage({ params, searchParams }: PageProps<"/tas
                         <span className="text-xs text-muted">{who(s, l.by, l.scheduled)} · {fmt(l.finishedAt)}</span>
                         <Badge tone={tone[l.outcome]}>{l.outcome}</Badge>
                       </div>
-                      <p className="text-xs">{s.taskItems.find((i) => i.$id === l.taskItemId)?.item} {l.summary}</p>
+                      <p className="text-xs">{l.item && <span className="text-muted">{l.item}: </span>}{l.summary}</p>
                     </li>
                   ))}
                 </ul>

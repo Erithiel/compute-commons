@@ -33,6 +33,60 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
   );
 }
 
+type Row = { key: number; text: string; status?: { label: string; tone: string } };
+
+/** Editable rows of a task. Each row is claimed separately by Claude; status/who is read-only. */
+export function ItemsTable({ initial, editable }: { initial: Omit<Row, "key">[]; editable: boolean }) {
+  const [rows, setRows] = useState<Row[]>(() => initial.map((r, i) => ({ ...r, key: i })));
+  const [next, setNext] = useState(initial.length);
+  const add = (texts: string[], at = rows.length) => {
+    setRows((rs) => [...rs.slice(0, at), ...texts.map((text, i) => ({ key: next + i, text })), ...rs.slice(at)]);
+    setNext((n) => n + texts.length);
+  };
+  const set = (key: number, text: string) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, text } : r)));
+  const remove = (key: number) => setRows((rs) => rs.filter((r) => r.key !== key));
+
+  return (
+    <div className="overflow-hidden rounded-md border border-line">
+      <table className="w-full text-sm">
+        <thead className="bg-hover text-left text-xs text-muted">
+          <tr><th className="w-8 px-2 py-1.5">#</th><th className="px-2 py-1.5">Item</th><th className="px-2 py-1.5">Status</th>{editable && <th className="w-8" />}</tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {rows.map((r, i) => (
+            <tr key={r.key}>
+              <td className="px-2 text-xs text-muted">{i + 1}</td>
+              <td className="px-1 py-1">
+                <input name="items" value={r.text} readOnly={!editable} placeholder="e.g. a client, a site, a file…"
+                  onChange={(e) => set(r.key, e.target.value)}
+                  onPaste={(e) => {
+                    const lines = e.clipboardData.getData("text").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+                    if (lines.length < 2) return;
+                    e.preventDefault();
+                    set(r.key, lines[0]);
+                    add(lines.slice(1), i + 1);
+                  }}
+                  className="w-full rounded border border-transparent bg-transparent px-1.5 py-1 outline-none focus:border-accent" />
+              </td>
+              <td className="whitespace-nowrap px-2 text-xs">
+                {r.status ? <span className={r.status.tone}>{r.status.label}</span> : <span className="text-muted">new</span>}
+              </td>
+              {editable && <td><button type="button" onClick={() => remove(r.key)} className="px-2 text-muted hover:text-red-600" aria-label="Remove row">×</button></td>}
+            </tr>
+          ))}
+          {!rows.length && <tr><td colSpan={4} className="px-2 py-3 text-xs text-muted">No rows: the task is done as one piece of work.</td></tr>}
+        </tbody>
+      </table>
+      {editable && (
+        <div className="border-t border-line px-2 py-1.5">
+          <button type="button" onClick={() => add([""])} className="text-xs text-accent hover:underline">+ Add row</button>
+          <span className="ml-3 text-xs text-muted">Tip: paste many lines into a row to add them all.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TokenForm({ appUrl }: { appUrl: string }) {
   const [state, action, pending] = useActionState(createToken, null);
   const cmd = state && `claude mcp add --transport http commons ${appUrl}/api/mcp --header "Authorization: Bearer ${state.token}"`;

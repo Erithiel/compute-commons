@@ -49,11 +49,12 @@ One database, `commons`. v1 serves one team, and every row carries `teamId` so m
 | Table | Key columns | Notes |
 |---|---|---|
 | `members` | `userId` (Appwrite user), `teamId`, `role` (`lead` \| `member`), `name` | Roles are the simple permissions feature (IDEA §7). |
-| `tasks` | `teamId`, `title`, `description`, `mode` (`once` \| `routine`), `redoDays`, `items` (optional list of strings), `assignees` (member ids; empty = anyone), `priority`, `currentVersion` | Any repeatable job, not only code (D16, D17). Every run uses the latest prompt version. |
-| `task_versions` | `taskId`, `version`, `prompt` (markdown, may use `{{item}}`), `authorId`, `createdAt` | Immutable. Editing a task's prompt creates a new row. |
-| `task_items` | `teamId`, `taskId`, `item` (one line of the list, `""` when there is none), `status` (`available` \| `done` \| `failed` \| `skipped`), `lastDoneAt`, `lastLogId` | The unit of work and of claiming. One row per list line. |
+| `tasks` | `teamId`, `title`, `repeatDays` (0 = once), `assignees` (member ids; empty = anyone), `currentVersion` | A task is a title and a prompt that can ask for anything (D22). Every run uses the latest prompt version. |
+| `task_versions` | `taskId`, `version`, `prompt` (free text), `authorId`, `createdAt` | Immutable history. Editing a task's prompt creates a new row. |
+| `member_notes` | `taskId`, `memberId`, `text`, `updatedAt` | A member's own addition to a task's prompt (e.g. where their files are). Only that member's Claude receives it (D24). Unique per task + member. |
+| `task_items` | `teamId`, `taskId`, `text` (one row of the task's table, `""` when the task has no rows), `position`, `status` (`available` \| `done` \| `failed` \| `skipped`), `lastDoneAt`, `lastLogId` | The unit of work and of claiming (D23). One per row; a task without rows has one hidden item. |
 | `claims` | **row id = task item id**, `by` (member id), `scheduled`, `claimedAt`, `leaseUntil` | The lock. See §4. |
-| `logs` | `taskItemId`, `taskId`, `by` (member id), `scheduled`, `outcome` (`done` \| `failed` \| `skipped`), `summary`, `details` (free text: what was done, where the result is), `version`, `startedAt`, `finishedAt` | Who did what, when. The board's and the Logs page's data. |
+| `logs` | `taskId`, `itemId`, `item` (row text copied at the time), `by` (member id), `scheduled`, `outcome` (`done` \| `failed` \| `skipped`), `summary`, `details` (free text: what was done, where the result is), `version`, `startedAt`, `finishedAt` | Who did what, when, on which row. Board and Logs page data. |
 | `settings` | `teamId`, `policy` (markdown) | One row. The policy goes before every task prompt (rules such as how to deliver results; for code teams, the branching strategy, D15). |
 | `api_tokens` | `owner` (member id), `scheduled` (made for a Claude schedule), `name`, `tokenHash`, `lastUsedAt`, `revoked` | MCP access (§6). Store the hash only. |
 | `audit_log` | `teamId`, `actor`, `action`, `entity`, `before`, `after`, `at` | Every change to tasks, settings, members and tokens. |
@@ -68,7 +69,7 @@ The one tricky part is two people (or a person and a schedule) taking the same t
 - **Expired leases:** if the create fails, read the existing claim. If `leaseUntil` is in the past, delete it and create ours **inside one Appwrite transaction**. If two claimers race for the same stale claim, the transaction's conflict detection should let only one commit. This needs a quick test against our 1.8.1 server before we rely on it.
 - **Heartbeat:** long runs call `heartbeat` to push `leaseUntil` forward (default lease 2 hours, a setting).
 - **Finish:** `complete`, `fail` or `skip` writes a `logs` row, updates the `task_items` status, and deletes the claim, in one transaction.
-- **Eligibility** (decided by the server, not the AI): not claimed (or lease expired), not done (one-off) or past `lastDoneAt + redoDays` (routine), the caller is assigned (or the task has no assignees).
+- **Eligibility** (decided by the server, not the AI): not claimed (or lease expired), not done (one-off) or past `lastDoneAt + repeatDays` (routine), the caller is assigned (or the task has no assignees).
 
 ## 5. MCP server
 
@@ -79,9 +80,9 @@ The one tricky part is two people (or a person and a schedule) taking the same t
 | Tool | Input | Does |
 |---|---|---|
 | `list_work` | `limit?` | Eligible task items with task title, item, last log and suggested order. For choosing a specific item. |
-| `get_task` | `itemId` | Merged prompt: team policy + task prompt (latest version), with `{{item}}` filled in. |
-| `next_task` | – | Main path for schedules: the server picks the highest-priority free item, claims it and returns its prompt. Nothing left → empty. |
-| `claim` | `itemId` | Claim a specific item (§4). Re-checks it is still eligible; returns the lease end time, or "taken" / "done". |
+| `get_task` | `itemId` | What Claude receives: team policy + task prompt (latest version) + the caller's own note + `Item: <row>` when it is a row. |
+| `next_task` | – | Main path: the server picks the next free item the caller can take (never-done first), claims it and returns what to do. Nothing left → empty. |
+| `claim` | `itemId` | Claim a specific item (§4). Re-checks eligibility and assignment; returns the lease end time, or "taken" / "done" / "not-assigned". |
 | `heartbeat` | `itemId` | Extends the lease. |
 | `complete` | `itemId`, `summary`, `details?` | Writes a "done" log. |
 | `fail` | `itemId`, `reason` | Writes a "failed" log and frees the item. |
@@ -109,9 +110,9 @@ The server also sends `instructions` (the workflow: next_task → work → heart
 | Page | For | Contents |
 |---|---|---|
 | `/login` | everyone | Email + password. |
-| `/board` | everyone | Task items: free, claimed (who, until when), done (summary), failed (reason). Quick "add task". |
-| `/tasks` | lead edits, members read | Task list and editor: title, description, **prompt**, one-off or routine (redo after N days), optional item list, assigned to (members), priority; prompt history, preview. |
-| `/logs` | everyone | Who executed what: when, who, task, item, outcome, duration, summary; expand for details. |
+| `/board` | everyone | Read-only: per task, each row (or the task) as free / in progress by X until HH:MM / done / failed, with the last log line. Quick "add task". No claim buttons: only Claude claims. |
+| `/tasks` | lead edits, members read | Task list and editor: title, **prompt** (anything), optional **rows table** (add, remove, paste many; read-only status per row), repeat (once / every N days), assigned to; **my note** (any member, only their Claude gets it); prompt history, preview. |
+| `/logs` | everyone | Who executed what: when, who (tagged "scheduled"), task, row, outcome, duration, summary; expand for details. |
 | `/setup` | everyone | **Connect Claude**, once: create a token, guide to add the connector, and **"copy prompt"** for the Claude scheduled task. |
 | `/settings` | lead | Members and roles, team policy, API tokens. |
 | `/settings/tokens` | everyone | Create or revoke your own MCP token; shows the `claude mcp add` command. |
@@ -126,7 +127,7 @@ Use the "commons" MCP connector and work through our team's task queue.
 
 Everything else comes from our server, so changing a task or the rules changes what tonight's run does without re-pasting:
 - **How to work** (next_task → work → heartbeat → complete/fail/skip → repeat until empty) is the MCP server's `instructions`, sent when Claude connects.
-- **The task itself** (team policy + task prompt, with `{{item}}` filled in) comes from `get_task`.
+- **The task itself** (team policy + task prompt + `Item: <row>` for a row) comes from `next_task` / `get_task`.
 
 ## 9. Repository layout
 
@@ -141,7 +142,7 @@ compute-commons/
 │   ├── lib/
 │   │   ├── appwrite.ts        ← server client (API key) + session client
 │   │   ├── claims.ts          ← claim / heartbeat / finish (§4) + vitest test
-│   │   ├── prompt.ts          ← team policy + task prompt, fill {{item}} + test
+│   │   ├── prompt.ts          ← team policy + task prompt + row + test
 │   │   └── auth.ts            ← session + MCP token checks, role guard
 │   ├── components/ui/         ← shadcn components
 │   └── scripts/setup-appwrite.ts  ← creates database, tables, indexes (idempotent)

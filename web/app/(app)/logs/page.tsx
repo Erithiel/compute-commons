@@ -41,7 +41,6 @@ export default async function LogsPage({ searchParams }: PageProps<"/logs">) {
         </div>
         {logs.map((l) => {
           const task = s.tasks.find((k) => k.$id === l.taskId);
-          const item = s.taskItems.find((i) => i.$id === l.taskItemId)?.item;
           return (
             <details key={l.$id} className="group min-w-[680px] border-b border-line last:border-0">
               <summary className="grid cursor-pointer list-none grid-cols-[110px_140px_1fr_80px_70px] items-start gap-3 px-3 py-2.5 text-sm hover:bg-hover">
@@ -49,7 +48,7 @@ export default async function LogsPage({ searchParams }: PageProps<"/logs">) {
                 <span>{who(s, l.by, l.scheduled)}</span>
                 <span className="min-w-0">
                   <span className="font-medium">{task?.title}</span>
-                  {item && <span className="text-muted"> · {item}</span>}
+                  {l.item && <span className="text-muted"> · {l.item}</span>}
                   <span className="block truncate text-xs text-muted">{l.summary}</span>
                 </span>
                 <span><Badge tone={tone[l.outcome]}>{l.outcome}</Badge></span>

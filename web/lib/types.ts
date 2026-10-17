@@ -1,5 +1,4 @@
 export type Role = "lead" | "member";
-export type TaskMode = "once" | "routine";
 export type ItemStatus = "available" | "done" | "failed" | "skipped";
 export type Outcome = "done" | "failed" | "skipped";
 
@@ -7,26 +6,29 @@ export type Caller =
   { kind: "member"; memberId: string; role: Role; scheduled: boolean }; // scheduled = token made for a Claude schedule (logs are tagged "scheduled")
 
 export interface Member { $id: string; teamId: string; userId: string; name: string; role: Role }
+
+/** A task is a title and a prompt. The prompt can ask for anything; we only store, hand out and track it. */
 export interface Task {
-  $id: string; teamId: string; title: string; description: string;
-  mode: TaskMode; redoDays: number;      // routine: comes back after redoDays; once: 0
-  items: string[];                       // optional list; [] = the task is a single item
+  $id: string; teamId: string; title: string;
+  repeatDays: number;                    // 0 = once; N = each item comes back N days after it was last done
   assignees: string[];                   // member ids; [] = anyone
-  priority: number;
-  currentVersion: number;               // every run uses the latest prompt; older versions are history
+  currentVersion: number;                // the prompt lives in task_versions; every run uses the latest
 }
-export interface TaskVersion {
-  $id: string; taskId: string; version: number; prompt: string; // markdown, may use {{item}}
-  authorId: string; createdAt: string;
-}
-export interface TaskItem {              // the unit of work and of claiming
-  $id: string; teamId: string; taskId: string; item: string; // "" when the task has no list
+export interface TaskVersion { $id: string; taskId: string; version: number; prompt: string; authorId: string; createdAt: string }
+
+/** A member's own addition to a task's prompt (e.g. where their files are). Only their Claude receives it. */
+export interface MemberNote { $id: string; taskId: string; memberId: string; text: string; updatedAt: string }
+
+/** The unit that is claimed and done. A task without rows has one hidden item with text "". */
+export interface TaskItem {
+  $id: string; teamId: string; taskId: string; text: string; position: number;
   status: ItemStatus; lastDoneAt: string | null; lastLogId: string | null;
 }
 export interface Claim { $id: string /* = taskItemId */; by: string /* memberId */; scheduled: boolean; claimedAt: string; leaseUntil: string }
 export interface Log {
-  $id: string; taskItemId: string; taskId: string; by: string /* memberId */; scheduled: boolean; outcome: Outcome; summary: string;
-  details: string | null;                // free text from Claude: what it did, where the result is (link, file, branch…), notes
+  $id: string; taskId: string; itemId: string; item: string /* row text at the time, "" for the whole task */;
+  by: string /* memberId */; scheduled: boolean; outcome: Outcome; summary: string;
+  details: string | null;                // free text from Claude: what it did, where the result is, notes
   version: number; startedAt: string; finishedAt: string;
 }
 export interface Settings { $id: string; teamId: string; policy: string }

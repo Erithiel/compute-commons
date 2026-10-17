@@ -5,8 +5,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "node:crypto";
 import { requireLead, requireMember } from "@/lib/auth";
-import { canTake, db, ensureItems, id, logAudit, now, parseItems, TEAM } from "@/lib/mock";
-import type { Outcome, Role, TaskMode } from "@/lib/types";
+import { db, id, logAudit, now, TEAM } from "@/lib/mock";
+import type { Role, Task } from "@/lib/types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const done = () => revalidatePath("/", "layout");
@@ -21,96 +21,69 @@ export async function signOut() {
   redirect("/login");
 }
 
-// --- Board: simulated MCP calls (removed once F5 lands) and lead actions (F6) ---
-export async function claimItem(f: FormData) {
-  const me = await requireMember();
+// --- Tasks (F2). Claiming is never done from the UI: only Claude claims, through MCP (F4/F5). ---
+/** Keep a task's rows in sync with the editor table. A task without rows gets one hidden "" item. */
+async function syncItems(taskId: string, texts: string[]) {
   const s = await db();
-  const iid = str(f, "id");
-  const item = s.taskItems.find((x) => x.$id === iid);
-  const task = s.tasks.find((k) => k.$id === item?.taskId);
-  if (!item || !task || !canTake(task, me.$id)) return; // not-found / not-assigned
-  const c = s.claims.find((x) => x.$id === iid);
-  if (c && new Date(c.leaseUntil) > new Date()) return; // taken
-  s.claims = s.claims.filter((x) => x.$id !== iid);
-  s.claims.push({ $id: iid, by: me.$id, scheduled: false, claimedAt: now(), leaseUntil: new Date(Date.now() + 120 * 60_000).toISOString() });
-  done();
-}
-export async function finishItem(f: FormData) {
-  const me = await requireMember();
-  const s = await db();
-  const iid = str(f, "id");
-  const outcome = str(f, "outcome") as Outcome;
-  const c = s.claims.find((x) => x.$id === iid);
-  const item = s.taskItems.find((w) => w.$id === iid);
-  if (!item || (outcome !== "skipped" && c?.by !== me.$id)) return;
-  const task = s.tasks.find((k) => k.$id === item.taskId)!;
-  const log = {
-    $id: id("l"), taskItemId: iid, taskId: task.$id, by: me.$id, scheduled: false, outcome,
-    summary: { done: "Done (mock run).", failed: "Failed (mock run).", skipped: "Skipped by hand." }[outcome],
-    details: outcome === "done" ? "Mock run: in the real flow Claude sends what it did and where the result is via complete." : null,
-    version: task.currentVersion, startedAt: c?.claimedAt ?? now(), finishedAt: now(),
-  };
-  s.logs.unshift(log);
-  Object.assign(item, { status: outcome, lastLogId: log.$id, ...(outcome === "done" && { lastDoneAt: log.finishedAt }) });
-  s.claims = s.claims.filter((x) => x.$id !== iid);
-  done();
-}
-export async function releaseClaim(f: FormData) {
-  const lead = await requireLead();
-  const s = await db();
-  const c = s.claims.find((x) => x.$id === str(f, "id"));
-  s.claims = s.claims.filter((x) => x !== c);
-  await logAudit(lead.$id, "claim.release", str(f, "id"), c);
-  done();
-}
-export async function resetItem(f: FormData) {
-  const lead = await requireLead();
-  const item = (await db()).taskItems.find((w) => w.$id === str(f, "id"));
-  if (item) item.status = "available";
-  await logAudit(lead.$id, "item.reset", str(f, "id"));
-  done();
+  const want = texts.length ? texts : [""];
+  const existing = s.taskItems.filter((i) => i.taskId === taskId);
+  // Rows removed from the table disappear; their logs keep the row text.
+  s.taskItems = s.taskItems.filter((i) => i.taskId !== taskId || want.includes(i.text));
+  want.forEach((text, position) => {
+    const found = existing.find((i) => i.text === text);
+    if (found) found.position = position;
+    else s.taskItems.push({ $id: id("i"), teamId: TEAM, taskId, text, position, status: "available", lastDoneAt: null, lastLogId: null });
+  });
 }
 
-// --- Tasks (F2) ---
-/** Create or edit a task. Every save of the prompt is a new immutable version. */
+/** Create or edit a task: title, prompt, repeat, assignees, optional rows. Every change to the prompt is a new version. */
 export async function saveTask(f: FormData) {
   const lead = await requireLead();
   const s = await db();
-  let task = s.tasks.find((k) => k.$id === str(f, "id"));
+  let task: Task | undefined = s.tasks.find((k) => k.$id === str(f, "id"));
   if (!task) {
-    task = { $id: id("k"), teamId: TEAM, title: "", description: "", mode: "once", redoDays: 0, items: [], assignees: [], priority: 0, currentVersion: 0 };
+    task = { $id: id("k"), teamId: TEAM, title: "", repeatDays: 0, assignees: [], currentVersion: 0 };
     s.tasks.push(task);
   }
-  const mode = str(f, "mode") as TaskMode;
   Object.assign(task, {
-    title: str(f, "title"), description: str(f, "description"), mode,
-    redoDays: mode === "routine" ? Math.max(1, Number(str(f, "redoDays")) || 7) : 0,
-    items: parseItems(str(f, "items")), assignees: f.getAll("assignees").map(String), priority: Number(str(f, "priority")) || 0,
+    title: str(f, "title"),
+    repeatDays: str(f, "repeat") === "every" ? Math.max(1, Number(str(f, "repeatDays")) || 7) : 0,
+    assignees: f.getAll("assignees").map(String),
   });
-  const prompt = str(f, "prompt");
+  const prompt = str(f, "prompt").replaceAll("\r\n", "\n"); // browsers send textarea line breaks as \r\n
   const cur = s.taskVersions.find((v) => v.taskId === task.$id && v.version === task.currentVersion);
   if (!cur || cur.prompt !== prompt) {
     task.currentVersion++;
     s.taskVersions.push({ $id: id("v"), taskId: task.$id, version: task.currentVersion, prompt, authorId: lead.$id, createdAt: now() });
   }
-  await ensureItems(task.$id, task.items);
+  await syncItems(task.$id, [...new Set(f.getAll("items").map((x) => String(x).trim()).filter(Boolean))]);
   await logAudit(lead.$id, cur ? "task.edit" : "task.create", task.$id, undefined, { title: task.title, version: task.currentVersion });
   done();
   redirect(`/tasks/${task.$id}`);
+}
+/** Any member: save (or clear) their own note on a task. Only their Claude receives it. */
+export async function saveMyNote(f: FormData) {
+  const me = await requireMember();
+  const s = await db();
+  const taskId = str(f, "id");
+  const text = str(f, "note").replaceAll("\r\n", "\n");
+  s.memberNotes = s.memberNotes.filter((n) => !(n.taskId === taskId && n.memberId === me.$id));
+  if (text) s.memberNotes.push({ $id: id("n"), taskId, memberId: me.$id, text, updatedAt: now() });
+  done();
 }
 export async function suggestChange(f: FormData) {
   const me = await requireMember();
   await logAudit(me.$id, "task.suggest", str(f, "id"), undefined, str(f, "note"));
   done();
 }
-/** Board quick-add: a one-off task with just a title and prompt. */
+/** Board quick-add: a once / anyone task with just a title and a prompt. */
 export async function quickTask(f: FormData) {
   const lead = await requireLead();
   const s = await db();
-  const t = { $id: id("k"), teamId: TEAM, title: str(f, "title"), description: "", mode: "once" as const, redoDays: 0, items: [], assignees: [], priority: 0, currentVersion: 1 };
+  const t: Task = { $id: id("k"), teamId: TEAM, title: str(f, "title"), repeatDays: 0, assignees: [], currentVersion: 1 };
   s.tasks.push(t);
   s.taskVersions.push({ $id: id("v"), taskId: t.$id, version: 1, prompt: str(f, "prompt"), authorId: lead.$id, createdAt: now() });
-  await ensureItems(t.$id, []);
+  await syncItems(t.$id, []);
   await logAudit(lead.$id, "task.create", t.$id, undefined, { title: t.title });
   done();
 }
