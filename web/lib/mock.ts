@@ -5,7 +5,8 @@ import "server-only";
 import { cache } from "react";
 import { connection } from "next/server";
 import { Query } from "node-appwrite";
-import { allRows, rowOrNull, T, TEAM_ID } from "./appwrite";
+import { allRows, rowOrNull, T } from "./appwrite";
+import { getMember } from "./auth";
 import { canTake, isActive } from "./claims";
 import { buildPrompt } from "./prompt";
 import { DEFAULT_POLICY } from "./tables";
@@ -16,26 +17,27 @@ export type Store = {
   claims: Claim[]; logs: Log[]; settings: Settings; apiTokens: ApiToken[]; audit: AuditEntry[];
 };
 
-const team = [Query.equal("teamId", TEAM_ID)];
-
 /** Await before reading: marks the render as request-time (cacheComponents is on). Loaded once per request (layout + page share it). */
 export const db = cache(async (): Promise<Store> => {
   await connection();
+  const me = await getMember();
+  if (!me) throw new Error("Forbidden"); // the (app) layout redirects before this happens
+  const team = [Query.equal("teamId", me.teamId)];
   const [members, tasks, taskVersions, taskItems, memberNotes, claims, logs, settings, apiTokens, audit] = await Promise.all([
     allRows<Member>(T.members, team),
     allRows<Task>(T.tasks, [...team, Query.orderAsc("$createdAt")]),
-    allRows<TaskVersion>(T.taskVersions),
+    allRows<TaskVersion>(T.taskVersions, team),
     allRows<TaskItem>(T.taskItems, team),
-    allRows<MemberNote>(T.memberNotes),
-    allRows<Claim>(T.claims),
-    allRows<Log>(T.logs, [Query.orderDesc("finishedAt"), Query.limit(500)]), // ponytail: newest 500; page it when Logs needs more
-    rowOrNull<Settings>(T.settings, "settings"),
-    allRows<ApiToken>(T.apiTokens),
+    allRows<MemberNote>(T.memberNotes, team),
+    allRows<Claim>(T.claims, team),
+    allRows<Log>(T.logs, [...team, Query.orderDesc("finishedAt"), Query.limit(500)]), // ponytail: newest 500; page it when Logs needs more
+    rowOrNull<Settings>(T.settings, me.teamId),
+    allRows<ApiToken>(T.apiTokens, team),
     allRows<AuditEntry>(T.audit, [...team, Query.orderDesc("at"), Query.limit(200)]),
   ]);
   return {
     members, tasks, taskVersions, taskItems, memberNotes, claims, logs, apiTokens, audit,
-    settings: settings ?? { $id: "settings", teamId: TEAM_ID, policy: DEFAULT_POLICY },
+    settings: settings ?? { $id: me.teamId, teamId: me.teamId, policy: DEFAULT_POLICY },
   };
 });
 

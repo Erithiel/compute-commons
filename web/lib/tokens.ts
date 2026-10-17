@@ -9,10 +9,10 @@ export const newTokenString = () => `cc_${randomBytes(32).toString("base64url")}
 export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 /** A token always belongs to one member; scheduled = made for their Claude schedule (logs say "scheduled"). */
-export async function createToken(memberId: string, name: string, scheduled: boolean) {
+export async function createToken(teamId: string, memberId: string, name: string, scheduled: boolean) {
   const token = newTokenString();
   const row = await adminTables().createRow(DB_ID, T.apiTokens, ID.unique(), {
-    owner: memberId, scheduled, name: name.trim() || "token", tokenHash: hashToken(token), lastUsedAt: null, revoked: false,
+    teamId, owner: memberId, scheduled, name: name.trim() || "token", tokenHash: hashToken(token), lastUsedAt: null, revoked: false,
   });
   return { token, row: row as unknown as ApiToken };
 }
@@ -23,9 +23,9 @@ export async function verifyBearer(header: string | null): Promise<Caller | null
   if (!token) return null;
   const [row] = await allRows<ApiToken>(T.apiTokens, [Query.equal("tokenHash", hashToken(token)), Query.equal("revoked", false)]);
   const member = row && await rowOrNull<Member>(T.members, row.owner);
-  if (!member) return null;
+  if (!member || row.teamId !== member.teamId) return null;
   await adminTables().updateRow(DB_ID, T.apiTokens, row.$id, { lastUsedAt: new Date().toISOString() });
-  return { kind: "member", memberId: member.$id, role: member.role, scheduled: row.scheduled };
+  return { kind: "member", memberId: member.$id, teamId: member.teamId, role: member.role, scheduled: row.scheduled };
 }
 
 export async function revokeToken(id: string) {

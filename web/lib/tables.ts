@@ -1,6 +1,5 @@
 // Table ids and env constants. No "server-only" here so scripts/ and tests can import it.
 export const DB_ID = process.env.APPWRITE_DATABASE_ID ?? "commons";
-export const TEAM_ID = process.env.TEAM_ID ?? "rando";
 export const T = {
   members: "members", tasks: "tasks", taskVersions: "task_versions", taskItems: "task_items", memberNotes: "member_notes",
   claims: "claims", takeovers: "claim_takeovers", logs: "logs", settings: "settings", apiTokens: "api_tokens", audit: "audit_log",

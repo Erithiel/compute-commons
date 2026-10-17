@@ -1,7 +1,7 @@
 // Tasks (F2): versions, rows, personal notes. Only leads call saveTask (checked in the action).
 import "server-only";
 import { ID, Query } from "node-appwrite";
-import { adminTables, allRows, DB_ID, rowOrNull, T, TEAM_ID } from "./appwrite";
+import { adminTables, allRows, DB_ID, rowOrNull, T } from "./appwrite";
 import type { MemberNote, Task, TaskItem, TaskVersion } from "./types";
 
 export const nextVersion = (current: number) => current + 1;
@@ -17,10 +17,10 @@ const db = () => adminTables();
 export type TaskInput = { title: string; prompt: string; repeatDays: number; assignees: string[]; rows: string[] };
 
 /** Create (no id) or edit a task. A changed prompt becomes a new version; returns the task and what changed for the audit. */
-export async function saveTask(id: string | null, input: TaskInput, authorId: string) {
+export async function saveTask(teamId: string, id: string | null, input: TaskInput, authorId: string) {
   const prompt = normalise(input.prompt);
   const old = id ? await rowOrNull<Task>(T.tasks, id) : null;
-  if (id && !old) throw new Error("Task not found");
+  if (id && (!old || old.teamId !== teamId)) throw new Error("Task not found");
   const fields = { title: input.title.trim(), repeatDays: Math.max(0, input.repeatDays), assignees: input.assignees };
   const taskId = old?.$id ?? ID.unique();
   const cur = old && (await allRows<TaskVersion>(T.taskVersions, [Query.equal("taskId", taskId), Query.equal("version", old.currentVersion)]))[0];
@@ -28,12 +28,12 @@ export async function saveTask(id: string | null, input: TaskInput, authorId: st
 
   if (version !== old?.currentVersion) {
     // The unique (taskId, version) index makes two leads saving at once fail instead of forking history.
-    await db().createRow(DB_ID, T.taskVersions, ID.unique(), { taskId, version, prompt, authorId, createdAt: new Date().toISOString() });
+    await db().createRow(DB_ID, T.taskVersions, ID.unique(), { teamId, taskId, version, prompt, authorId, createdAt: new Date().toISOString() });
   }
   const task = old
     ? await db().updateRow(DB_ID, T.tasks, taskId, { ...fields, currentVersion: version })
-    : await db().createRow(DB_ID, T.tasks, taskId, { teamId: TEAM_ID, ...fields, currentVersion: version });
-  await syncItems(taskId, input.rows);
+    : await db().createRow(DB_ID, T.tasks, taskId, { teamId, ...fields, currentVersion: version });
+  await syncItems(teamId, taskId, input.rows);
   return { task: task as unknown as Task, created: !old, newVersion: version !== old?.currentVersion ? version : null };
 }
 
@@ -42,10 +42,10 @@ export async function saveTask(id: string | null, input: TaskInput, authorId: st
  * new rows start "available", kept rows keep their status and get their new position.
  * A task without rows has one hidden item "".
  */
-export async function syncItems(taskId: string, rows: string[]) {
+export async function syncItems(teamId: string, taskId: string, rows: string[]) {
   const want = cleanRows(rows);
   if (!want.length) want.push("");
-  const existing = await allRows<TaskItem>(T.taskItems, [Query.equal("taskId", taskId)]);
+  const existing = await allRows<TaskItem>(T.taskItems, [Query.equal("taskId", taskId), Query.equal("teamId", teamId)]);
   const byText = new Map(existing.map((i) => [i.text ?? "", i]));
   await Promise.all([
     ...existing.filter((i) => !want.includes(i.text ?? "")).flatMap((i) => [
@@ -54,24 +54,24 @@ export async function syncItems(taskId: string, rows: string[]) {
     ]),
     ...want.map((text, position) => {
       const found = byText.get(text);
-      if (!found) return db().createRow(DB_ID, T.taskItems, ID.unique(), { teamId: TEAM_ID, taskId, text, position, status: "available", lastDoneAt: null, lastLogId: null });
+      if (!found) return db().createRow(DB_ID, T.taskItems, ID.unique(), { teamId, taskId, text, position, status: "available", lastDoneAt: null, lastLogId: null });
       return found.position === position ? null : db().updateRow(DB_ID, T.taskItems, found.$id, { position });
     }),
   ]);
 }
 
-const noteRow = async (taskId: string, memberId: string) =>
-  (await allRows<MemberNote>(T.memberNotes, [Query.equal("taskId", taskId), Query.equal("memberId", memberId)]))[0] ?? null;
+const noteRow = async (teamId: string, taskId: string, memberId: string) =>
+  (await allRows<MemberNote>(T.memberNotes, [Query.equal("teamId", teamId), Query.equal("taskId", taskId), Query.equal("memberId", memberId)]))[0] ?? null;
 
 /** A member's own note on a task ("" if none). Only their Claude receives it. */
-export const getNote = async (taskId: string, memberId: string) => (await noteRow(taskId, memberId))?.text ?? "";
+export const getNote = async (teamId: string, taskId: string, memberId: string) => (await noteRow(teamId, taskId, memberId))?.text ?? "";
 
 /** Save the caller's own note; empty text deletes it. */
-export async function saveNote(taskId: string, memberId: string, text: string) {
+export async function saveNote(teamId: string, taskId: string, memberId: string, text: string) {
   const clean = normalise(text);
-  const row = await noteRow(taskId, memberId);
+  const row = await noteRow(teamId, taskId, memberId);
   if (!clean) { if (row) await db().deleteRow(DB_ID, T.memberNotes, row.$id); return; }
-  const data = { taskId, memberId, text: clean, updatedAt: new Date().toISOString() };
+  const data = { teamId, taskId, memberId, text: clean, updatedAt: new Date().toISOString() };
   if (row) await db().updateRow(DB_ID, T.memberNotes, row.$id, data);
   else await db().createRow(DB_ID, T.memberNotes, ID.unique(), data);
 }

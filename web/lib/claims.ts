@@ -3,7 +3,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { ID, Query } from "node-appwrite";
-import { adminTables, allRows, DB_ID, isCode, rowOrNull, T, TEAM_ID } from "./appwrite";
+import { adminTables, allRows, DB_ID, isCode, rowOrNull, T } from "./appwrite";
 import type { Caller, Claim, Log, Task, TaskItem } from "./types";
 
 const DAY = 86_400_000;
@@ -52,9 +52,9 @@ async function inTransaction(stage: (tx: string) => Promise<unknown>) {
 export async function listEligible(caller: Caller, limit = 10) {
   const now = new Date();
   const [tasks, items, claims] = await Promise.all([
-    allRows<Task>(T.tasks, [Query.equal("teamId", TEAM_ID)]),
-    allRows<TaskItem>(T.taskItems, [Query.equal("teamId", TEAM_ID), Query.orderAsc("position")]),
-    allRows<Claim>(T.claims),
+    allRows<Task>(T.tasks, [Query.equal("teamId", caller.teamId)]),
+    allRows<TaskItem>(T.taskItems, [Query.equal("teamId", caller.teamId), Query.orderAsc("position")]),
+    allRows<Claim>(T.claims, [Query.equal("teamId", caller.teamId)]),
   ]);
   const taskOf = new Map(tasks.filter((t) => canTake(t, caller.memberId)).map((t) => [t.$id, t]));
   const claimOf = new Map(claims.map((c) => [c.$id, c]));
@@ -73,12 +73,12 @@ export async function claim(itemId: string, caller: Caller, leaseMinutes = LEASE
   Promise<{ ok: true; leaseUntil: string } | { ok: false; reason: ClaimFail }> {
   const item = await rowOrNull<TaskItem>(T.taskItems, itemId);
   const task = item && await rowOrNull<Task>(T.tasks, item.taskId);
-  if (!item || !task || item.teamId !== TEAM_ID) return { ok: false, reason: "not-found" };
+  if (!item || !task || item.teamId !== caller.teamId) return { ok: false, reason: "not-found" };
   if (!canTake(task, caller.memberId)) return { ok: false, reason: "not-assigned" };
   const now = new Date();
   if (!isEligible(item, task, null, now)) return { ok: false, reason: "done" };
 
-  const data = { by: caller.memberId, scheduled: caller.scheduled, claimedAt: iso(now), leaseUntil: leaseEnd(now, leaseMinutes) };
+  const data = { teamId: caller.teamId, by: caller.memberId, scheduled: caller.scheduled, claimedAt: iso(now), leaseUntil: leaseEnd(now, leaseMinutes) };
   try {
     await db().createRow(DB_ID, T.claims, itemId, data);
   } catch (e) {
@@ -146,11 +146,11 @@ export async function recordSkip(itemId: string, caller: Caller, reason: string)
 async function writeLog(itemId: string, caller: Caller, outcome: Log["outcome"], summary: string, details: string | null, held: Claim | null): Promise<Log> {
   const item = await rowOrNull<TaskItem>(T.taskItems, itemId);
   const task = item && await rowOrNull<Task>(T.tasks, item.taskId);
-  if (!item || !task) throw new Error("not-found");
+  if (!item || !task || item.teamId !== caller.teamId) throw new Error("not-found");
   if (!canTake(task, caller.memberId)) throw new Error("not-assigned");
   const now = iso(new Date());
   const log: Omit<Log, "$id"> = {
-    taskId: task.$id, itemId, item: item.text, by: caller.memberId, scheduled: held?.scheduled ?? caller.scheduled,
+    teamId: task.teamId, taskId: task.$id, itemId, item: item.text, by: caller.memberId, scheduled: held?.scheduled ?? caller.scheduled,
     outcome, summary, details, version: task.currentVersion, startedAt: held?.claimedAt ?? now, finishedAt: now,
   };
   const $id = ID.unique();

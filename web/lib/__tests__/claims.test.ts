@@ -11,11 +11,11 @@ const now = new Date("2026-10-20T12:00:00Z");
 describe("isEligible", () => {
   it("free item is eligible", () => expect(isEligible(item(), task(), null, now)).toBe(true));
   it("active claim blocks", () => {
-    const c: Claim = { $id: "i1", by: "m1", scheduled: false, claimedAt: "2026-10-20T11:00:00Z", leaseUntil: "2026-10-20T13:00:00Z" };
+    const c: Claim = { $id: "i1", teamId: "t", by: "m1", scheduled: false, claimedAt: "2026-10-20T11:00:00Z", leaseUntil: "2026-10-20T13:00:00Z" };
     expect(isEligible(item(), task(), c, now)).toBe(false);
   });
   it("expired claim does not block", () => {
-    const c: Claim = { $id: "i1", by: "m1", scheduled: false, claimedAt: "2026-10-20T08:00:00Z", leaseUntil: "2026-10-20T10:00:00Z" };
+    const c: Claim = { $id: "i1", teamId: "t", by: "m1", scheduled: false, claimedAt: "2026-10-20T08:00:00Z", leaseUntil: "2026-10-20T10:00:00Z" };
     expect(isEligible(item(), task(), c, now)).toBe(true);
   });
   it("once means done once", () => {

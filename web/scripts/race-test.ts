@@ -1,14 +1,14 @@
-// F4 acceptance against the real server: TEAM_ID=race-test npm run race-test
-// Runs in its own team id so the real team's tasks are never touched; deletes what it creates.
+// F4 acceptance against the real server: npm run race-test
+// Runs in its own team id so a real team's tasks are never touched; deletes what it creates.
 import assert from "node:assert/strict";
 import { ID, Query } from "node-appwrite";
-import { adminTables, DB_ID, T, TEAM_ID } from "../lib/appwrite";
+import { adminTables, DB_ID, T } from "../lib/appwrite";
 import { claim, claimNext, finish } from "../lib/claims";
 import type { Caller } from "../lib/types";
 
-assert.equal(TEAM_ID, "race-test", "run as: TEAM_ID=race-test npm run race-test (keeps the real team untouched)");
+const TEAM = "race-test";
 const db = adminTables();
-const bot = (n: number): Caller => ({ kind: "member", memberId: `racer${n}`, role: "member", scheduled: false });
+const bot = (n: number): Caller => ({ kind: "member", memberId: `racer${n}`, teamId: TEAM, role: "member", scheduled: false });
 const created: Array<[string, string]> = [];
 const make = async (table: string, data: Record<string, unknown>) => {
   const row = await db.createRow(DB_ID, table, ID.unique(), data);
@@ -16,11 +16,11 @@ const make = async (table: string, data: Record<string, unknown>) => {
   return row.$id;
 };
 const item = (taskId: string, text: string, position: number) =>
-  make(T.taskItems, { teamId: TEAM_ID, taskId, text, position, status: "available", lastDoneAt: null, lastLogId: null });
+  make(T.taskItems, { teamId: TEAM, taskId, text, position, status: "available", lastDoneAt: null, lastLogId: null });
 const okCount = (rs: Array<{ ok: boolean }>) => rs.filter((r) => r.ok).length;
 
 async function main() {
-  const taskId = await make(T.tasks, { teamId: TEAM_ID, title: "race", repeatDays: 0, assignees: [], currentVersion: 1 });
+  const taskId = await make(T.tasks, { teamId: TEAM, title: "race", repeatDays: 0, assignees: [], currentVersion: 1 });
   const one = await item(taskId, "only", 0);
 
   const first = await Promise.all(Array.from({ length: 10 }, (_, n) => claim(one, bot(n))));

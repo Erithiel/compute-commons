@@ -8,7 +8,7 @@ import { DB_ID } from "./tables";
 const endpoint = process.env.APPWRITE_ENDPOINT!;
 const project = process.env.APPWRITE_PROJECT_ID!;
 
-export { DB_ID, TEAM_ID, T } from "./tables";
+export { DB_ID, T } from "./tables";
 
 const base = () => new Client().setEndpoint(endpoint).setProject(project);
 
