@@ -11,7 +11,7 @@ export interface Invite {
 }
 
 export type Caller =
-  { kind: "member"; memberId: string; teamId: string; role: Role; scheduled: boolean }; // scheduled = token made for a Claude schedule (logs are tagged "scheduled")
+  { kind: "member"; memberId: string; teamId: string; role: Role };
 
 export interface Member { $id: string; teamId: string; userId: string; name: string; role: Role }
 
@@ -36,13 +36,13 @@ export interface TaskItem {
   data?: string | null;                  // JSON {column: value} for the row's columns
   status: ItemStatus; lastDoneAt: string | null; lastLogId: string | null;
 }
-export interface Claim { $id: string /* = taskItemId */; teamId: string; by: string /* memberId */; scheduled: boolean; claimedAt: string; leaseUntil: string }
+export interface Claim { $id: string /* = taskItemId */; teamId: string; by: string /* memberId */; claimedAt: string; leaseUntil: string }
 export interface Log {
   $id: string; teamId: string; taskId: string; itemId: string; item: string /* row text at the time, "" for the whole task */;
-  by: string /* memberId */; scheduled: boolean; outcome: Outcome; summary: string;
+  by: string /* memberId */; outcome: Outcome; summary: string;
   details: string | null;                // free text from Claude: what it did, where the result is, notes
   version: number; startedAt: string; finishedAt: string;
 }
 export interface Settings { $id: string; teamId: string; policy: string }
-export interface ApiToken { $id: string; teamId: string; owner: string /* memberId */; scheduled: boolean; name: string; tokenHash: string; lastUsedAt: string | null; revoked: boolean }
+export interface ApiToken { $id: string; teamId: string; owner: string /* memberId */; name: string; tokenHash: string; lastUsedAt: string | null; revoked: boolean }
 export interface AuditEntry { $id: string; teamId: string; actor: string; action: string; entity: string; before: string | null; after: string | null; at: string }

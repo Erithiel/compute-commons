@@ -32,8 +32,8 @@ async function main() {
   // Auth
   await assert.rejects(connect(), "no token must get 401");
   await assert.rejects(connect("cc_wrong"), "an unknown token must get 401");
-  const L = await connect((await createToken(TEAM_ID, lead.$id, "smoke", false)).token);
-  const M = await connect((await createToken(TEAM_ID, mem.$id, "smoke", true)).token);
+  const L = await connect((await createToken(TEAM_ID, lead.$id, "smoke")).token);
+  const M = await connect((await createToken(TEAM_ID, mem.$id, "smoke")).token);
   assert.match(L.getInstructions() ?? "", /next_task/);
 
   // Worker tools

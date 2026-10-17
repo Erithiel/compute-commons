@@ -138,7 +138,7 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[id]">) {
                   {logs.map((l) => (
                     <li key={l.$id} className="py-2">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-muted">{who(s, l.by, l.scheduled)} · {fmt(l.finishedAt)}</span>
+                        <span className="text-xs text-muted">{who(s, l.by)} · {fmt(l.finishedAt)}</span>
                         <Badge tone={tone[l.outcome]}>{l.outcome}</Badge>
                       </div>
                       <p className="text-xs">{l.item && <span className="text-muted">{l.item}: </span>}{l.summary}</p>

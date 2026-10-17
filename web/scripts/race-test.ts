@@ -9,7 +9,7 @@ import type { Caller } from "../lib/types";
 
 const TEAM = "race-test";
 const db = adminTables();
-const bot = (n: number): Caller => ({ kind: "member", memberId: `racer${n}`, teamId: TEAM, role: "member", scheduled: false });
+const bot = (n: number): Caller => ({ kind: "member", memberId: `racer${n}`, teamId: TEAM, role: "member" });
 const created: Array<[string, string]> = [];
 const make = async (table: string, data: Record<string, unknown>) => {
   const row = await db.createRow(DB_ID, table, ID.unique(), data);

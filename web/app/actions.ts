@@ -94,9 +94,8 @@ export async function leaveTeam(): Promise<Refusal> {
 /** Returns the raw token once; only its hash is stored. The token always belongs to the caller. */
 export async function createToken(_: unknown, f: FormData): Promise<{ token: string } | null> {
   const me = await requireMember();
-  const scheduled = str(f, "kind") === "schedule";
-  const { token, row } = await newToken(me.teamId, me.$id, str(f, "name"), scheduled);
-  await audit(me.teamId, me.$id, "token.create", row.$id, undefined, { name: row.name, scheduled });
+  const { token, row } = await newToken(me.teamId, me.$id, str(f, "name"));
+  await audit(me.teamId, me.$id, "token.create", row.$id, undefined, { name: row.name });
   done();
   return { token };
 }

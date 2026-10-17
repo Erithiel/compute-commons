@@ -126,10 +126,6 @@ export function TokenForm({ appUrl }: { appUrl: string }) {
   return (
     <div className="space-y-3">
       <form action={action} className="flex flex-wrap gap-2 sm:flex-nowrap">
-        <select name="kind" className={`${control} w-full sm:w-auto`}>
-          <option value="schedule">For my Claude schedule</option>
-          <option value="manual">For my own Claude Code sessions</option>
-        </select>
         <input name="name" placeholder="Token name (e.g. laptop)" className={input} required />
         <button className={btnPrimary} disabled={pending}>Create token</button>
       </form>

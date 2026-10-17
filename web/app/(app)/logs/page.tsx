@@ -48,12 +48,12 @@ export default async function LogsPage({ searchParams }: PageProps<"/logs">) {
             <details key={l.$id} className="group border-b border-line last:border-0">
               <summary className={`grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-x-3 gap-y-1 px-3 py-2.5 text-sm transition-[background-color,color] duration-150 hover:bg-hover ${cols} [&::-webkit-details-marker]:hidden`}>
                 <span className="hidden text-xs text-muted md:block">{fmt(l.finishedAt)}</span>
-                <span className="hidden md:block">{who(s, l.by, l.scheduled)}</span>
+                <span className="hidden md:block">{who(s, l.by)}</span>
                 <span className="min-w-0">
                   <span className="font-medium">{task?.title}</span>
                   {l.item && <span className="text-muted"> · {l.item}</span>}
                   <span className="block truncate text-xs text-muted">{l.summary}</span>
-                  <span className="mt-1 block text-xs text-muted md:hidden">{fmt(l.finishedAt)} · {who(s, l.by, l.scheduled)} · {took}</span>
+                  <span className="mt-1 block text-xs text-muted md:hidden">{fmt(l.finishedAt)} · {who(s, l.by)} · {took}</span>
                 </span>
                 <span><Badge tone={tone[l.outcome]}>{l.outcome}</Badge></span>
                 <span className="hidden text-xs text-muted md:block">{took}</span>

@@ -40,6 +40,7 @@ Short record of what the team has decided, parked or assigned. Newest at the bot
 | D27 | Invite links instead of email | There is no SMTP on api.rando.ge yet, so a lead creates a one-time link (7 days, role chosen, hash stored) and sends it by hand. Email invites, verification and password reset wait for SMTP. |
 | D28 | Our own login throttle | Our server logs in with the API key, and API-key calls skip Appwrite's rate limits. So login attempts are counted in `login_attempts`, before the password is checked: 5 attempts per email per fixed 15-minute window, then that email is locked until the window ends. The count is per email, so anyone can lock out a known email for the rest of the window, and trying one password across many emails is not throttled. |
 | D29 | Manage through MCP | Leads can set up the team's work from Claude: create, edit and delete tasks and routines, assign members, manage members and the team policy, through the same MCP connector. Same role rules and audit as the web app; members get read tools and their own note. A routine is still just a task with repeatDays (D16). |
+| D30 | One kind of token | A member's token serves both their Claude Code sessions and their Claude schedules. The old "for my schedule" kind only tagged logs "· scheduled", which said which token was used, not how the run happened, and made setup a choice for nothing. Replaces the token-kind part of D19. The `scheduled` columns stay in the database unused (the migration is additive). |
 
 ## Consequences of D4 (to design)
 

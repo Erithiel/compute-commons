@@ -56,11 +56,11 @@ One database, `commons`. Every table except `teams`, `login_attempts` and `claim
 | `task_versions` | `taskId`, `version`, `prompt` (free text), `authorId`, `createdAt` | Immutable history. Editing a task's prompt creates a new row. |
 | `member_notes` | `taskId`, `memberId`, `text`, `updatedAt` | A member's own addition to a task's prompt (e.g. where their files are). Only that member's Claude receives it (D24). Unique per task + member. |
 | `task_items` | `teamId`, `taskId`, `text` (one row of the task's table, `""` when the task has no rows), `position`, `status` (`available` \| `done` \| `failed` \| `skipped`), `lastDoneAt`, `lastLogId` | The unit of work and of claiming (D23). One per row; a task without rows has one hidden item. |
-| `claims` | **row id = task item id**, `by` (member id), `scheduled`, `claimedAt`, `leaseUntil` | The lock. See §4. |
+| `claims` | **row id = task item id**, `by` (member id), `claimedAt`, `leaseUntil` | The lock. See §4. |
 | `claim_takeovers` | **row id = hash(item id + expired claim's `claimedAt`)**, `itemId` | Lock for taking over an expired claim. Never deleted. See §4. |
-| `logs` | `taskId`, `itemId`, `item` (row text copied at the time), `by` (member id), `scheduled`, `outcome` (`done` \| `failed` \| `skipped`), `summary`, `details` (free text: what was done, where the result is), `version`, `startedAt`, `finishedAt` | Who did what, when, on which row. Board and Logs page data. |
+| `logs` | `taskId`, `itemId`, `item` (row text copied at the time), `by` (member id), `outcome` (`done` \| `failed` \| `skipped`), `summary`, `details` (free text: what was done, where the result is), `version`, `startedAt`, `finishedAt` | Who did what, when, on which row. Board and Logs page data. |
 | `settings` | `teamId`, `policy` (markdown) | One row. The policy goes before every task prompt (rules such as how to deliver results; for code teams, the branching strategy, D15). |
-| `api_tokens` | `owner` (member id), `scheduled` (made for a Claude schedule), `name`, `tokenHash`, `lastUsedAt`, `revoked` | MCP access (§6). Store the hash only. |
+| `api_tokens` | `owner` (member id), `name`, `tokenHash`, `lastUsedAt`, `revoked` | MCP access (§6). Store the hash only. |
 | `audit_log` | `teamId`, `actor`, `action`, `entity`, `before`, `after`, `at` | Every change to tasks, settings, members and tokens. |
 
 Permissions: the browser never talks to Appwrite directly in v1. Server code uses an API key and checks the member's role before every write. Table-level permissions stay closed to clients.
@@ -142,7 +142,7 @@ The server also sends `instructions` when Claude connects: the workflow for doin
 | `/login` | everyone | Email + password. |
 | `/board` | everyone | Read-only: per task, each row (or the task) as free / in progress by X until HH:MM / done / failed, with the last log line. Quick "add task". No claim buttons: only Claude claims. |
 | `/tasks` | lead edits, members read | Task list and editor: title, **prompt** (anything), optional **rows table** (add, remove, paste many; read-only status per row), repeat (once / every N days), assigned to; **my note** (any member, only their Claude gets it); prompt history, preview. |
-| `/logs` | everyone | Who executed what: when, who (tagged "scheduled"), task, row, outcome, duration, summary; expand for details. |
+| `/logs` | everyone | Who executed what: when, who, task, row, outcome, duration, summary; expand for details. |
 | `/setup` | everyone | **Connect Claude**, once: create a token, guide to add the connector, and **"copy prompt"** for the Claude scheduled task. |
 | `/settings` | lead | Members and roles, team policy, API tokens. |
 | `/settings/tokens` | everyone | Create or revoke your own MCP token; shows the `claude mcp add` command. |

@@ -7,7 +7,7 @@ const APP_URL = "https://commons.example"; // ponytail: replace with the deploye
 
 // One-time setup: connect Claude to our MCP server. After this, Claude fetches tasks by itself.
 export default async function SetupPage() {
-  const me = await requireMember();
+  await requireMember();
 
   return (
     <>
@@ -17,8 +17,7 @@ export default async function SetupPage() {
           <Card title="1 · Create a token">
             <p className="mb-3 text-sm text-muted">
               The token says who you are, so the work is logged under your name and uses your own Claude limit.
-              Pick <b>schedule</b> for a Claude scheduled task (its work is logged as &quot;{me.name} · scheduled&quot;)
-              or <b>own sessions</b> for working in Claude Code yourself. It is shown once.
+              One token works for your Claude Code sessions and your Claude schedules. It is shown once.
             </p>
             <TokenForm appUrl={APP_URL} />
           </Card>

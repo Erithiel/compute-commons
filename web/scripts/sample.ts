@@ -46,19 +46,19 @@ export function sample(TEAM: string) {
     it("i9", "k5", "", 0, "skipped", null, "l4"),
   ];
   const claims: Claim[] = [
-    { $id: "i2", teamId: TEAM, by: "m2", scheduled: false, claimedAt: ago(0.5 * H), leaseUntil: ahead(1.5 * H) },
-    { $id: "i6", teamId: TEAM, by: "m3", scheduled: true, claimedAt: ago(0.2 * H), leaseUntil: ahead(1.8 * H) },
+    { $id: "i2", teamId: TEAM, by: "m2", claimedAt: ago(0.5 * H), leaseUntil: ahead(1.5 * H) },
+    { $id: "i6", teamId: TEAM, by: "m3", claimedAt: ago(0.2 * H), leaseUntil: ahead(1.8 * H) },
   ];
   const logs: Log[] = [
-    { $id: "l1", teamId: TEAM, taskId: "k1", itemId: "i1", item: "Acme Logistics (acme.ge)", by: "m2", scheduled: true, outcome: "done", summary: "Brief ready: mid-size logistics firm, outdated site, no online booking.", details: `Acme Logistics runs trucking between Tbilisi and Batumi (12 trucks).
+    { $id: "l1", teamId: TEAM, taskId: "k1", itemId: "i1", item: "Acme Logistics (acme.ge)", by: "m2", outcome: "done", summary: "Brief ready: mid-size logistics firm, outdated site, no online booking.", details: `Acme Logistics runs trucking between Tbilisi and Batumi (12 trucks).
 Likely needs: an online quote form, a Georgian/English site, Google Maps listing.
 Call ideas: 1) show a quote-form demo, 2) compare with their competitor's site, 3) offer a small first project.`, version: 1, startedAt: ago(21 * H), finishedAt: ago(20 * H) },
-    { $id: "l2", teamId: TEAM, taskId: "k1", itemId: "i3", item: "Tbilisi Tours (tbilisitours.ge)", by: "m3", scheduled: false, outcome: "failed", summary: "Website is down, not enough public info for a brief.", details: `tbilisitours.ge returns 503. Their Facebook page has no posts since 2024.
+    { $id: "l2", teamId: TEAM, taskId: "k1", itemId: "i3", item: "Tbilisi Tours (tbilisitours.ge)", by: "m3", outcome: "failed", summary: "Website is down, not enough public info for a brief.", details: `tbilisitours.ge returns 503. Their Facebook page has no posts since 2024.
 Needs a human: ask the lead for a contact or another source.`, version: 1, startedAt: ago(5 * H), finishedAt: ago(4.8 * H) },
-    { $id: "l3", teamId: TEAM, taskId: "k2", itemId: "i4", item: "webstudio.ge", by: "m1", scheduled: true, outcome: "done", summary: "Basic package went up from 900 to 1,100 GEL.", details: `Basic: 1,100 GEL (was 900) - 5 pages, hosting 1 year.
+    { $id: "l3", teamId: TEAM, taskId: "k2", itemId: "i4", item: "webstudio.ge", by: "m1", outcome: "done", summary: "Basic package went up from 900 to 1,100 GEL.", details: `Basic: 1,100 GEL (was 900) - 5 pages, hosting 1 year.
 Business: 2,400 GEL (unchanged).
 New: "SEO add-on" for 300 GEL/month.`, version: 1, startedAt: ago(31 * H), finishedAt: ago(30 * H) },
-    { $id: "l4", teamId: TEAM, taskId: "k5", itemId: "i9", item: "", by: "m2", scheduled: false, outcome: "skipped", summary: "Spreadsheet is being re-exported this week; retry later.", details: null, version: 1, startedAt: ago(19 * H), finishedAt: ago(19 * H) },
+    { $id: "l4", teamId: TEAM, taskId: "k5", itemId: "i9", item: "", by: "m2", outcome: "skipped", summary: "Spreadsheet is being re-exported this week; retry later.", details: null, version: 1, startedAt: ago(19 * H), finishedAt: ago(19 * H) },
   ];
   const memberNotes: MemberNote[] = [
     { $id: "n1", teamId: TEAM, taskId: "k5", memberId: "m2", text: "The spreadsheet is in my Google Drive: Sales/Customers 2026. Use the gdrive connector.", updatedAt: ago(48 * H) },

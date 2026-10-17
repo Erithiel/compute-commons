@@ -36,7 +36,7 @@ export default async function SettingsPage() {
           <ul className="divide-y divide-line text-sm">
             {tokens.map((t) => (
               <li key={t.$id} className="flex items-center justify-between gap-2 py-2">
-                <span>{t.name} <span className="text-xs text-muted">· {who(s, t.owner, t.scheduled)} · last used {fmt(t.lastUsedAt)}</span></span>
+                <span>{t.name} <span className="text-xs text-muted">· {who(s, t.owner)} · last used {fmt(t.lastUsedAt)}</span></span>
                 {t.revoked ? <Badge tone="red">revoked</Badge> : (
                   <form action={revokeToken}><input type="hidden" name="id" value={t.$id} /><button className={btn}>Revoke</button></form>
                 )}

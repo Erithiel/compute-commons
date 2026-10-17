@@ -57,7 +57,7 @@ export const SCHEMA: Record<string, { name: string; columns: Col[]; indexes: Idx
   },
   [T.claims]: {
     name: "Claims", // row id = task item id: creating it is the lock
-    columns: [id("teamId", false), id("by"), { key: "scheduled", type: "boolean", required: false, default: false }, at("claimedAt"), at("leaseUntil")],
+    columns: [id("teamId", false), id("by"), at("claimedAt"), at("leaseUntil")],
     indexes: [{ key: "team", type: "key", columns: ["teamId"] }],
   },
   [T.takeovers]: {
@@ -70,7 +70,6 @@ export const SCHEMA: Record<string, { name: string; columns: Col[]; indexes: Idx
   [T.logs]: {
     name: "Logs",
     columns: [id("teamId", false), id("taskId"), id("itemId"), { key: "item", type: "varchar", size: 1024, required: false }, id("by"),
-      { key: "scheduled", type: "boolean", required: false, default: false },
       { key: "outcome", type: "enum", elements: ["done", "failed", "skipped"], required: true },
       { key: "summary", type: "text", required: true }, { key: "details", type: "mediumtext" },
       { key: "version", type: "integer", required: true }, at("startedAt"), at("finishedAt")],
@@ -84,8 +83,7 @@ export const SCHEMA: Record<string, { name: string; columns: Col[]; indexes: Idx
   },
   [T.apiTokens]: {
     name: "API tokens",
-    columns: [id("teamId", false), id("owner"), { key: "scheduled", type: "boolean", required: false, default: false },
-      { key: "name", type: "varchar", size: 128, required: true }, { key: "tokenHash", type: "varchar", size: 64, required: true },
+    columns: [id("teamId", false), id("owner"), { key: "name", type: "varchar", size: 128, required: true }, { key: "tokenHash", type: "varchar", size: 64, required: true },
       at("lastUsedAt", false), { key: "revoked", type: "boolean", required: false, default: false }],
     indexes: [{ key: "hash", type: "unique", columns: ["tokenHash"] }, { key: "owner", type: "key", columns: ["owner"] }, { key: "team", type: "key", columns: ["teamId"] }],
   },

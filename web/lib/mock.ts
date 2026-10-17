@@ -68,9 +68,8 @@ export function activeClaim(s: Store, itemId: string) {
 
 export const itemsOf = (s: Store, taskId: string) => s.taskItems.filter((i) => i.taskId === taskId).sort((a, b) => a.position - b.position);
 
-/** Display name for a member id; adds "scheduled" for runs from that person's Claude schedule. */
-export function who(s: Store, by: string, scheduled = false): string {
-  if (scheduled) return `${who(s, by)} · ⏱ scheduled`;
+/** Display name for a member id. */
+export function who(s: Store, by: string): string {
   return s.members.find((m) => m.$id === by)?.name ?? by;
 }
 
@@ -79,6 +78,6 @@ export const repeatLabel = (t: Task) => (t.repeatDays ? `every ${t.repeatDays}d$
 /** Read-only state of an item for the UI: who is on it, or its last status. */
 export function itemState(s: Store, item: TaskItem) {
   const c = activeClaim(s, item.$id);
-  if (c) return { label: `${who(s, c.by, c.scheduled)} · until ${new Date(c.leaseUntil).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`, key: "in progress" };
+  if (c) return { label: `${who(s, c.by)} · until ${new Date(c.leaseUntil).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`, key: "in progress" };
   return { label: item.status === "available" ? "free" : item.status, key: item.status === "available" ? "free" : item.status };
 }

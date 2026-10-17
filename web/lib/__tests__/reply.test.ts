@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { leadOnly, ok, pickOne, run } from "../mcp/reply";
 import type { Caller } from "../types";
 
-const lead: Caller = { kind: "member", memberId: "m1", teamId: "t1", role: "lead", scheduled: false };
+const lead: Caller = { kind: "member", memberId: "m1", teamId: "t1", role: "lead" };
 const ctx = (caller?: Caller) => ({ http: { authInfo: { extra: caller ? { caller } : {} } } });
 const people = [{ $id: "m1", name: "Nino" }, { $id: "m2", name: "Giorgi" }, { $id: "m3", name: "giorgi " }];
 const name = (p: { name: string }) => p.name;

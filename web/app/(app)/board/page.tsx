@@ -79,7 +79,7 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
                   {item.text && <span className="truncate text-sm font-medium sm:font-normal">{item.text}</span>}
                   <span className={`text-sm ${item.text ? "" : "sm:col-span-2"}`}>
                     <Badge tone={tone[st.key]}>{st.label}</Badge>
-                    {log && st.key !== "in progress" && <span className="ml-2 text-xs text-muted">{who(s, log.by, log.scheduled)}: {log.summary}</span>}
+                    {log && st.key !== "in progress" && <span className="ml-2 text-xs text-muted">{who(s, log.by)}: {log.summary}</span>}
                   </span>
                 </li>
               ))}

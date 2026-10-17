@@ -12,7 +12,7 @@ export type ClaimFail = "taken" | "done" | "not-assigned" | "not-found";
 
 // --- Pure rules (unit tested) ---
 
-/** No assignees = anyone; otherwise only those listed (their scheduled runs included). */
+/** No assignees = anyone; otherwise only those listed (their Claude schedules included). */
 export const canTake = (task: Task, memberId: string) => task.assignees.length === 0 || task.assignees.includes(memberId);
 
 export const isActive = (claim: Claim | null, now: Date) => !!claim && new Date(claim.leaseUntil).getTime() > now.getTime();
@@ -82,7 +82,7 @@ export async function claim(itemId: string, caller: Caller, leaseMinutes = LEASE
   const now = new Date();
   if (!isEligible(item, task, null, now)) return { ok: false, reason: "done" };
 
-  const data = { teamId: caller.teamId, by: caller.memberId, scheduled: caller.scheduled, claimedAt: iso(now), leaseUntil: leaseEnd(now, leaseMinutes) };
+  const data = { teamId: caller.teamId, by: caller.memberId, claimedAt: iso(now), leaseUntil: leaseEnd(now, leaseMinutes) };
   try {
     await db().createRow(DB_ID, T.claims, itemId, data);
   } catch (e) {
@@ -155,7 +155,7 @@ async function writeLog(itemId: string, caller: Caller, outcome: Log["outcome"],
   if (!canTake(task, caller.memberId)) throw new Error("not-assigned");
   const now = iso(new Date());
   const log: Omit<Log, "$id"> = {
-    teamId: task.teamId, taskId: task.$id, itemId, item: item.text, by: caller.memberId, scheduled: held?.scheduled ?? caller.scheduled,
+    teamId: task.teamId, taskId: task.$id, itemId, item: item.text, by: caller.memberId,
     outcome, summary, details, version: task.currentVersion, startedAt: held?.claimedAt ?? now, finishedAt: now,
   };
   const $id = ID.unique();

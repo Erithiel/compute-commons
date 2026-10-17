@@ -70,7 +70,7 @@ export function registerManageTools(server: McpServer) {
       ...overview(s, t), version: t.currentVersion, prompt: promptOf(s, t), myNote: noteOf(s, t.$id, caller.memberId),
       items: itemsOf(s, t.$id).map((i) => ({ itemId: i.$id, row: i.text, state: itemState(s, i).label })),
       recentLogs: s.logs.filter((l) => l.taskId === t.$id).slice(0, 5)
-        .map((l) => ({ at: l.finishedAt, by: who(s, l.by, l.scheduled), row: l.item, outcome: l.outcome, summary: l.summary })),
+        .map((l) => ({ at: l.finishedAt, by: who(s, l.by), row: l.item, outcome: l.outcome, summary: l.summary })),
     });
   }));
 
@@ -87,7 +87,7 @@ export function registerManageTools(server: McpServer) {
     const m = member ? memberRef(s, member) : null;
     const logs = s.logs.filter((l) => (!t || l.taskId === t.$id) && (!m || l.by === m.$id) && (!outcome || l.outcome === outcome)).slice(0, limit ?? 20);
     return ok(`${logs.length} log(s), newest first.`, logs.map((l) => ({
-      at: l.finishedAt, by: who(s, l.by, l.scheduled), task: s.tasks.find((x) => x.$id === l.taskId)?.title ?? "(deleted task)",
+      at: l.finishedAt, by: who(s, l.by), task: s.tasks.find((x) => x.$id === l.taskId)?.title ?? "(deleted task)",
       row: l.item, outcome: l.outcome, summary: l.summary, details: l.details, version: l.version,
     })));
   }));
