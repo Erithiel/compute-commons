@@ -12,7 +12,7 @@ export default async function SettingsPage() {
   const me = await requireMember();
   const s = await db();
   const lead = me.role === "lead";
-  const invites = lead ? await allRows<Invite>(T.invites, [Query.equal("teamId", me.teamId), Query.isNull("usedBy"), Query.equal("revoked", false)]) : [];
+  const invites = lead ? await allRows<Invite>(T.invites, [Query.equal("teamId", me.teamId), Query.isNull("usedBy"), Query.equal("revoked", false), Query.greaterThan("expiresAt", new Date().toISOString())]) : [];
   const tokens = s.apiTokens.filter((t) => lead || t.owner === me.$id);
 
   return (

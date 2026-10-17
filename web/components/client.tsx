@@ -124,7 +124,7 @@ export function InviteForm() {
         <select name="role" aria-label="Role" className={control}><option value="member">Member</option><option value="lead">Lead</option></select>
         <button className={btnPrimary} disabled={pending}>Create invite link</button>
       </form>
-      {state && "error" in state && <p className="text-sm text-red-600">{state.error}</p>}
+      {state && "error" in state && <p role="alert" className="text-sm text-red-600">{state.error}</p>}
       {state && "link" in state && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           <pre className="mb-2 overflow-x-auto whitespace-pre-wrap break-all rounded bg-paper p-2 font-mono text-xs">{state.link}</pre>

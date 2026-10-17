@@ -920,4 +920,4 @@ git commit -m "docs(teams): accounts and teams; link sample members to real acco
 
 ## Later (not in this plan)
 
-Email verification and password reset (need SMTP on api.rando.ge) · several teams per person with a team switcher · invite-only signup flag · GitHub sign-in (Appwrite OAuth) · renaming or deleting a team · transferring the last lead role automatically when the lead deletes their account.
+Email verification and password reset (need SMTP on api.rando.ge) · several teams per person with a team switcher · invite-only signup flag · GitHub sign-in (Appwrite OAuth) · renaming or deleting a team · transferring the last lead role automatically when the lead deletes their account · a team's only lead cannot leave and teams cannot be deleted yet.

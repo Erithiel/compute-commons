@@ -17,7 +17,7 @@ async function Form() {
           <p className="text-sm text-muted">Create your team to get started.</p>
         </div>
       </div>
-      <div><label htmlFor="team" className={label}>Team name</label><input id="team" name="team" required className={input} /></div>
+      <div><label htmlFor="team" className={label}>Team name</label><input id="team" name="team" required maxLength={128} className={input} /></div>
       <button className={`${btnPrimary} w-full py-2`}>Create team</button>
       <p className="text-sm text-muted">Joining an existing team? Open the invite link your lead sent you.</p>
     </ActionForm>

@@ -15,7 +15,7 @@ async function Form({ searchParams }: { searchParams: Promise<{ next?: string }>
           <p className="text-sm text-muted">Create your account.</p>
         </div>
       </div>
-      <div><label htmlFor="name" className={label}>Name</label><input id="name" name="name" autoComplete="name" required className={input} /></div>
+      <div><label htmlFor="name" className={label}>Name</label><input id="name" name="name" autoComplete="name" required maxLength={128} className={input} /></div>
       <div><label htmlFor="email" className={label}>Email</label><input id="email" type="email" name="email" autoComplete="email" required className={input} placeholder="you@rando.ge" /></div>
       <div><label htmlFor="password" className={label}>Password</label><input id="password" type="password" name="password" minLength={8} autoComplete="new-password" required className={input} /></div>
       <button className={`${btnPrimary} w-full py-2`}>Create account</button>

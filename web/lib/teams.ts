@@ -70,6 +70,8 @@ export async function joinTeam(user: User, code: string): Promise<string | null>
   return null;
 }
 
+// ponytail: changeRole and removeMember check "one lead left", then write. Two leads demoting or removing each
+// other in the same instant can both pass and leave the team with no lead. A per-team lock row (as in claims) if this ever matters.
 export async function changeRole(lead: Member, memberId: string, role: Role): Promise<string | null> {
   const members = await allRows<Member>(T.members, [Query.equal("teamId", lead.teamId)]);
   const problem = leadProblem(members, memberId, role);
