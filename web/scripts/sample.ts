@@ -14,7 +14,7 @@ export function sample(TEAM: string) {
     { $id: "m3", teamId: TEAM, userId: "u3", name: "Giorgi", role: "member" },
   ];
   const task = (id: string, title: string, repeatDays: number, assignees: string[], currentVersion = 1): Task =>
-    ({ $id: id, teamId: TEAM, title, repeatDays, assignees, currentVersion });
+    ({ $id: id, teamId: TEAM, title, repeatDays, repeatFor: 0, columns: [], assignees, currentVersion });
   const tasks = [
     task("k1", "Client brief for each new lead", 0, ["m2", "m3"]),
     task("k2", "Weekly competitor price check", 7, ["m1"]),

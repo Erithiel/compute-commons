@@ -7,7 +7,7 @@ import { teamRow, T } from "@/lib/appwrite";
 import { audit } from "@/lib/audit";
 import { requireLead, requireMember } from "@/lib/auth";
 import { changeRole, createInvite, removeMember as removeMemberRow, revokeInvite, savePolicy } from "@/lib/teams";
-import { saveNote, saveTask as saveTaskRow } from "@/lib/tasks";
+import { rowText, saveNote, saveTask as saveTaskRow } from "@/lib/tasks";
 import { createToken as newToken, revokeToken as revoke } from "@/lib/tokens";
 import type { ApiToken, Role } from "@/lib/types";
 
@@ -19,13 +19,20 @@ const done = () => revalidatePath("/", "layout");
 /** Create or edit a task: title, prompt, repeat, assignees, optional rows. A changed prompt is a new version. */
 export async function saveTask(f: FormData) {
   const lead = await requireLead();
+  const every = str(f, "repeat") === "every";
+  const cells = f.getAll("items").map((v) => { try { return (JSON.parse(String(v)) as unknown[]).map(String); } catch { return [String(v)]; } });
   const { task, created, newVersion } = await saveTaskRow(lead.teamId, str(f, "id") || null, {
     title: str(f, "title"),
     prompt: String(f.get("prompt") ?? ""),
-    repeatDays: str(f, "repeat") === "every" ? Math.max(1, Number(str(f, "repeatDays")) || 7) : 0,
+    repeatDays: every ? Math.max(1, Number(str(f, "repeatDays")) || 1) : 0,
+    // "for a [1] [month]": the repeat stops that many days after creation. ponytail: a month is 30 days.
+    repeatFor: every ? Math.max(0, Number(str(f, "repeatFor")) || 0) * (Number(str(f, "repeatForUnit")) || 1) : 0,
     assignees: f.getAll("assignees").map(String),
-    rows: f.getAll("items").map(String),
+    columns: f.getAll("columns").map(String),
+    rows: cells.map(rowText),
+    cells,
   }, lead.$id);
+  if (created && str(f, "myNote")) await saveNote(lead.teamId, task.$id, lead.$id, String(f.get("myNote")));
   await audit(lead.teamId, lead.$id, created ? "task.create" : "task.edit", task.$id, undefined, { title: task.title, version: task.currentVersion, newVersion });
   done();
   redirect(`/tasks/${task.$id}`);

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { canTake, isEligible, sortWork } from "../claims";
 import type { Task, TaskItem, Claim } from "../types";
 
-const task = (o: Partial<Task> = {}): Task => ({ $id: "k1", teamId: "t", title: "T", repeatDays: 0, assignees: [], currentVersion: 1, ...o });
+const task = (o: Partial<Task> = {}): Task => ({ $id: "k1", teamId: "t", title: "T", repeatDays: 0, repeatFor: 0, columns: [], assignees: [], currentVersion: 1, ...o });
 const item = (o: Partial<TaskItem> = {}): TaskItem => ({
   $id: "i1", teamId: "t", taskId: "k1", text: "Acme", position: 0, status: "available", lastDoneAt: null, lastLogId: null, ...o,
 });
@@ -26,6 +26,12 @@ describe("isEligible", () => {
     const t = task({ repeatDays: 7 });
     expect(isEligible(item({ status: "done", lastDoneAt: "2026-10-18T12:00:00Z" }), t, null, now)).toBe(false);
     expect(isEligible(item({ status: "done", lastDoneAt: "2026-10-01T12:00:00Z" }), t, null, now)).toBe(true);
+  });
+  it("repeating stops after repeatFor days from creation", () => {
+    const done = item({ status: "done", lastDoneAt: "2026-10-18T12:00:00Z" });
+    expect(isEligible(done, task({ repeatDays: 1, repeatFor: 30, $createdAt: "2026-10-01T00:00:00Z" }), null, now)).toBe(true);
+    expect(isEligible(done, task({ repeatDays: 1, repeatFor: 7, $createdAt: "2026-10-01T00:00:00Z" }), null, now)).toBe(false);
+    expect(isEligible(done, task({ repeatDays: 1, repeatFor: 0, $createdAt: "2020-01-01T00:00:00Z" }), null, now)).toBe(true);
   });
 });
 

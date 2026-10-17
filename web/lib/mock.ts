@@ -8,7 +8,7 @@ import { Query } from "node-appwrite";
 import { allRows, rowOrNull, T } from "./appwrite";
 import { getMember } from "./auth";
 import { canTake, isActive } from "./claims";
-import { buildPrompt } from "./prompt";
+import { buildPrompt, itemPrompt } from "./prompt";
 import { DEFAULT_POLICY } from "./tables";
 import type { ApiToken, AuditEntry, Claim, Log, Member, MemberNote, Settings, Task, TaskItem, TaskVersion } from "./types";
 
@@ -57,7 +57,7 @@ export const promptOf = (s: Store, task: Task) =>
 
 /** Exactly what this member's Claude receives for the item: policy, prompt, their own note, the row. */
 export const claudePrompt = (s: Store, task: Task, item: TaskItem, memberId: string) =>
-  buildPrompt(s.settings.policy, promptOf(s, task), noteOf(s, task.$id, memberId), item.text);
+  buildPrompt(s.settings.policy, promptOf(s, task), noteOf(s, task.$id, memberId), itemPrompt(item));
 
 export { MCP_INSTRUCTIONS, SETUP_PROMPT } from "./mcp/instructions";
 
@@ -74,7 +74,7 @@ export function who(s: Store, by: string, scheduled = false): string {
   return s.members.find((m) => m.$id === by)?.name ?? by;
 }
 
-export const repeatLabel = (t: Task) => (t.repeatDays ? `every ${t.repeatDays}d` : "once");
+export const repeatLabel = (t: Task) => (t.repeatDays ? `every ${t.repeatDays}d${t.repeatFor ? ` for ${t.repeatFor}d` : ""}` : "once");
 
 /** Read-only state of an item for the UI: who is on it, or its last status. */
 export function itemState(s: Store, item: TaskItem) {
