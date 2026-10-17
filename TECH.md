@@ -28,7 +28,7 @@ One Next.js project holds the web app, the API and the MCP endpoint. Appwrite is
 | Database + auth | Appwrite **TablesDB**, self-hosted | server **1.8.1** (checked on api.rando.ge) | Already running. 1.8 has TablesDB and a Transactions API, which the claim logic needs. |
 | Appwrite SDK (server) | `node-appwrite` | **pinned 22.1.3** (latest is 30.0.1) | 22.1.3 is the last release built for API 1.8.1 (README at that tag); 23.x targets 1.9. All data access happens on the server with an API key. Its `createVarcharColumn`/`createTextColumn` routes do **not** exist on 1.8.1: the schema script uses `createStringColumn` (size > 16,381 makes a TEXT column; smaller ones are VARCHAR and count 4 bytes per char against the 64 KB row limit). |
 | Appwrite SDK (browser) | not needed at first | (`appwrite` 29.0.0) | Login runs through server actions with an httpOnly session cookie (Appwrite's SSR pattern). Add the browser SDK only if we need realtime. |
-| MCP server | `mcp-handler` + `@modelcontextprotocol/server` | 2.3.0 + 2.3.1 | Vercel's adapter for MCP in Next.js routes. Supports Streamable HTTP and auth helpers (`withMcpAuth`, protected-resource metadata) for when we add OAuth. |
+| MCP server | `mcp-handler` + `@modelcontextprotocol/server` | 2.3.0 + 2.3.1 (installed) | Vercel's adapter for MCP in Next.js routes. Supports Streamable HTTP and auth helpers (`withMcpAuth`, protected-resource metadata) for when we add OAuth. |
 | Validation | `zod` | 4.6.7 | Tool input schemas for MCP and form validation, one library for both. |
 | UI | Tailwind CSS + shadcn/ui | `tailwindcss` 4.3.3, `shadcn` CLI 4.22.0 | Copy-in components, no heavy UI dependency. Rando already uses shadcn. |
 | Prompt editor | plain `<textarea>` first, then `@uiw/react-codemirror` | 4.25.12 | Markdown prompts. CodeMirror only when people ask for syntax highlighting. |
@@ -76,7 +76,7 @@ The one tricky part is two people (or a person and a schedule) taking the same t
 
 ## 5. MCP server
 
-- Route: `app/api/[transport]/route.ts` with `mcp-handler`, stateless Streamable HTTP. The URL routines and Claude Code connect to is `https://<app>/api/mcp`.
+- Route: `app/api/mcp/route.ts` with `mcp-handler` 2.x (MCP SDK v2), stateless Streamable HTTP. Tools live in `lib/mcp/work.ts` and `lib/mcp/manage.ts`; `npm run mcp-smoke` checks them end to end. The URL routines and Claude Code connect to is `https://<app>/api/mcp`.
 - Every tool checks the caller's token (§6) and role, validates input with zod, and writes an audit entry for state changes.
 - Tool results are short JSON plus one plain-language line, so the AI can decide well.
 
@@ -91,8 +91,26 @@ The one tricky part is two people (or a person and a schedule) taking the same t
 | `fail` | `itemId`, `reason` | Writes a "failed" log and frees the item. |
 | `skip` | `itemId`, `reason` | The AI decided not to take it. Logged so the lead can see why. |
 | `board` | – | Who is working on what, what is free, recent logs. |
+| `save_my_note` | `task`, `text` | The caller's own note on a task (D24). Empty text removes it. |
 
-The server also sends `instructions` (the workflow: next_task → work → heartbeat → complete/fail/skip → repeat until empty) when Claude connects.
+Reading and managing the team's work (D26). Read tools for any member; write tools for leads only, with the same rules and audit as the web app (shared code in `lib/team.ts` and `lib/tasks.ts`). Members and tasks can be named by name or id.
+
+| Tool | Who | Input | Does |
+|---|---|---|---|
+| `list_members` | any | – | Members with id, name, role; `you: true` on the caller |
+| `list_tasks` | any | `query?` | Tasks: id, title, repeat, assigned to, rows, done, in progress |
+| `view_task` | any | `task` | One task: prompt, version, items with state and itemId, assignees, your note, last 5 logs |
+| `list_logs` | any | `task?`, `member?`, `outcome?`, `limit?` | Who did what, newest first, with details |
+| `get_policy` | any | – | The team policy |
+| `create_task` | lead | `title`, `prompt`, `repeatDays?`, `assignees?`, `rows?` | New task or routine |
+| `update_task` | lead | `task` + any of `title`, `prompt`, `repeatDays`, `assignees`, `addAssignees`, `removeAssignees`, `rows`, `addRows`, `removeRows` | Partial edit; a changed prompt becomes a new version |
+| `delete_task` | lead | `task` | Delete; logs stay |
+| `set_policy` | lead | `policy` | Replace the team policy |
+| `add_member` | lead | `name`, `role?` | Add a member |
+| `set_member_role` | lead | `member`, `role` | Make lead / member |
+| `remove_member` | lead | `member` | Remove; their tokens stop working |
+
+The server also sends `instructions` when Claude connects: the workflow for doing work (next_task → work → heartbeat → complete/fail/skip → repeat until empty) and for setting work up from a plain-language request.
 
 ## 6. Authentication
 

@@ -36,6 +36,7 @@ Short record of what the team has decided, parked or assigned. Newest at the bot
 | D23 | Optional rows; only Claude claims | A task can have a rows table (clients, sites, files…): the same prompt per row, each row claimed separately so several people or runs can share a task. A task without rows is one piece of work. Claiming happens only from Claude through MCP; the web app shows who is on what, read-only (no claim/complete/release buttons; stuck claims expire). |
 | D24 | Personal notes on tasks | Each member can write their own note on a task (where their files are, which connector to use…). It is added after the task prompt only when **their** Claude fetches the task. Not versioned, editable only by its owner. Keeps the shared prompt generic while each person's machine differs. |
 | D25 | Takeover marker instead of a transaction | Taking over an expired claim is locked by creating a `claim_takeovers` row with a derived id (the same "create with a fixed id" trick as the claim itself). On our 1.8.1 server, delete + create in one transaction let two claimers win in a race test, so transactions are only used for all-or-nothing writes, never as a lock. |
+| D26 | Manage through MCP | Leads can set up the team's work from Claude: create, edit and delete tasks and routines, assign members, manage members and the team policy, through the same MCP connector. Same role rules and audit as the web app; members get read tools and their own note. A routine is still just a task with repeatDays (D16). |
 
 ## Consequences of D4 (to design)
 
