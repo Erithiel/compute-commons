@@ -39,6 +39,7 @@ Short record of what the team has decided, parked or assigned. Newest at the bot
 | D26 | Sign up, then create or join a team; one team per account | Anyone can sign up with email and password. A new account either creates a team (and is its lead) or joins one through an invite link. One team per account for now (unique `members.userId`); a team switcher is later. Every table row carries `teamId`, so teams never see each other. |
 | D27 | Invite links instead of email | There is no SMTP on api.rando.ge yet, so a lead creates a one-time link (7 days, role chosen, hash stored) and sends it by hand. Email invites, verification and password reset wait for SMTP. |
 | D28 | Our own login throttle | Our server logs in with the API key, and API-key calls skip Appwrite's rate limits. So login attempts are counted in `login_attempts`, before the password is checked: 5 attempts per email per fixed 15-minute window, then that email is locked until the window ends. The count is per email, so anyone can lock out a known email for the rest of the window, and trying one password across many emails is not throttled. |
+| D29 | Manage through MCP | Leads can set up the team's work from Claude: create, edit and delete tasks and routines, assign members, manage members and the team policy, through the same MCP connector. Same role rules and audit as the web app; members get read tools and their own note. A routine is still just a task with repeatDays (D16). |
 
 ## Consequences of D4 (to design)
 

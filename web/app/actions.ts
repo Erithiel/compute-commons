@@ -3,18 +3,17 @@
 // Later each feature can move its slice into its own actions.ts; the exports here keep the pages unchanged meanwhile.
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { adminTables, DB_ID, teamRow, T } from "@/lib/appwrite";
+import { teamRow, T } from "@/lib/appwrite";
 import { audit } from "@/lib/audit";
 import { requireLead, requireMember } from "@/lib/auth";
-import { changeRole, createInvite, removeMember as removeMemberRow, revokeInvite } from "@/lib/teams";
+import { changeRole, createInvite, removeMember as removeMemberRow, revokeInvite, savePolicy } from "@/lib/teams";
 import { saveNote, saveTask as saveTaskRow } from "@/lib/tasks";
 import { createToken as newToken, revokeToken as revoke } from "@/lib/tokens";
-import type { ApiToken, Role, Settings } from "@/lib/types";
+import type { ApiToken, Role } from "@/lib/types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const role = (f: FormData): Role => (str(f, "role") === "lead" ? "lead" : "member");
 const done = () => revalidatePath("/", "layout");
-const db = () => adminTables();
 
 // --- Tasks (F2). Claiming is never done from the UI: only Claude claims, through MCP (F4/F5). ---
 /** Create or edit a task: title, prompt, repeat, assignees, optional rows. A changed prompt is a new version. */
@@ -50,13 +49,9 @@ export async function quickTask(f: FormData) {
   done();
 }
 
-// --- Settings: policy (F3), members (F1), tokens (F5) ---
+// --- Settings: policy (F3), members (F1), tokens (F5). Member and policy writes live in lib/team.ts (shared with MCP). ---
 export async function saveSettings(f: FormData) {
-  const lead = await requireLead();
-  const before = await teamRow<Settings>(T.settings, lead.teamId, lead.teamId);
-  const policy = String(f.get("policy") ?? "").replaceAll("\r\n", "\n").trim();
-  await db().upsertRow(DB_ID, T.settings, lead.teamId, { teamId: lead.teamId, policy });
-  await audit(lead.teamId, lead.$id, "settings.edit", "settings", before?.policy, policy);
+  await savePolicy(await requireLead(), String(f.get("policy") ?? ""));
   done();
 }
 export async function makeInvite(_: unknown, f: FormData): Promise<{ link: string } | { error: string } | null> {

@@ -17,12 +17,9 @@ export type Store = {
   claims: Claim[]; logs: Log[]; settings: Settings; apiTokens: ApiToken[]; audit: AuditEntry[];
 };
 
-/** Await before reading: marks the render as request-time (cacheComponents is on). Loaded once per request (layout + page share it). */
-export const db = cache(async (): Promise<Store> => {
-  await connection();
-  const me = await getMember();
-  if (!me) throw new Error("Forbidden"); // the (app) layout redirects before this happens
-  const team = [Query.equal("teamId", me.teamId)];
+/** One snapshot of a team's data. MCP tools pass the caller's team; pages use db() below. */
+export async function loadStore(teamId: string): Promise<Store> {
+  const team = [Query.equal("teamId", teamId)];
   const [members, tasks, taskVersions, taskItems, memberNotes, claims, logs, settings, apiTokens, audit] = await Promise.all([
     allRows<Member>(T.members, team),
     allRows<Task>(T.tasks, [...team, Query.orderAsc("$createdAt")]),
@@ -31,20 +28,36 @@ export const db = cache(async (): Promise<Store> => {
     allRows<MemberNote>(T.memberNotes, team),
     allRows<Claim>(T.claims, team),
     allRows<Log>(T.logs, [...team, Query.orderDesc("finishedAt"), Query.limit(500)]), // ponytail: newest 500; page it when Logs needs more
-    rowOrNull<Settings>(T.settings, me.teamId),
+    rowOrNull<Settings>(T.settings, teamId),
     allRows<ApiToken>(T.apiTokens, team),
     allRows<AuditEntry>(T.audit, [...team, Query.orderDesc("at"), Query.limit(200)]),
   ]);
   return {
     members, tasks, taskVersions, taskItems, memberNotes, claims, logs, apiTokens, audit,
-    settings: settings ?? { $id: me.teamId, teamId: me.teamId, policy: DEFAULT_POLICY },
+    settings: settings ?? { $id: teamId, teamId, policy: DEFAULT_POLICY },
   };
+}
+
+/** Await before reading: marks the render as request-time (cacheComponents is on). Loaded once per request (layout + page share it). */
+export const db = cache(async (): Promise<Store> => {
+  await connection();
+  const me = await getMember();
+  if (!me) throw new Error("Forbidden"); // the (app) layout redirects before this happens
+  return loadStore(me.teamId);
 });
 
 export { buildPrompt, canTake, DEFAULT_POLICY };
 
 export const noteOf = (s: Store, taskId: string, memberId: string) =>
   s.memberNotes.find((n) => n.taskId === taskId && n.memberId === memberId)?.text ?? "";
+
+/** The prompt of the version in use (every run uses the latest). */
+export const promptOf = (s: Store, task: Task) =>
+  s.taskVersions.find((v) => v.taskId === task.$id && v.version === task.currentVersion)?.prompt ?? "";
+
+/** Exactly what this member's Claude receives for the item: policy, prompt, their own note, the row. */
+export const claudePrompt = (s: Store, task: Task, item: TaskItem, memberId: string) =>
+  buildPrompt(s.settings.policy, promptOf(s, task), noteOf(s, task.$id, memberId), item.text);
 
 export { MCP_INSTRUCTIONS, SETUP_PROMPT } from "./mcp/instructions";
 

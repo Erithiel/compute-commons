@@ -37,6 +37,38 @@ export async function saveTask(teamId: string, id: string | null, input: TaskInp
   return { task: task as unknown as Task, created: !old, newVersion: version !== old?.currentVersion ? version : null };
 }
 
+export type TaskPatch = Partial<TaskInput> & { addAssignees?: string[]; removeAssignees?: string[]; addRows?: string[]; removeRows?: string[] };
+
+/** A partial edit (the update_task MCP tool) applied to the task as it is now. Fields not given stay. */
+export function patchTask(cur: TaskInput, p: TaskPatch): TaskInput {
+  const edit = (base: string[], add: string[] = [], remove: string[] = []) => {
+    const drop = new Set(remove.map((x) => x.trim()));
+    return cleanRows([...base, ...add]).filter((x) => !drop.has(x));
+  };
+  return {
+    title: p.title ?? cur.title,
+    prompt: p.prompt ?? cur.prompt,
+    repeatDays: p.repeatDays ?? cur.repeatDays,
+    assignees: edit(p.assignees ?? cur.assignees, p.addAssignees, p.removeAssignees),
+    rows: edit(p.rows ?? cur.rows, p.addRows, p.removeRows),
+  };
+}
+
+/** Delete a task of this team with its rows, claims and notes. Logs and prompt history stay. */
+export async function deleteTask(teamId: string, taskId: string) {
+  const task = await rowOrNull<Task>(T.tasks, taskId);
+  if (!task || task.teamId !== teamId) throw new Error("Task not found");
+  const [items, notes] = await Promise.all([
+    allRows<TaskItem>(T.taskItems, [Query.equal("taskId", taskId)]),
+    allRows<MemberNote>(T.memberNotes, [Query.equal("taskId", taskId)]),
+  ]);
+  await Promise.all([
+    ...items.flatMap((i) => [db().deleteRow(DB_ID, T.taskItems, i.$id), db().deleteRow(DB_ID, T.claims, i.$id).catch(() => {})]),
+    ...notes.map((n) => db().deleteRow(DB_ID, T.memberNotes, n.$id)),
+  ]);
+  await db().deleteRow(DB_ID, T.tasks, taskId);
+}
+
 /**
  * Make the task's items match the editor table. Removed rows are deleted (their logs keep the row text),
  * new rows start "available", kept rows keep their status and get their new position.

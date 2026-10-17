@@ -4,8 +4,9 @@ import { ID, Query } from "node-appwrite";
 import { adminTables, allRows, DB_ID, isCode, rowOrNull, T, teamRow } from "./appwrite";
 import { audit } from "./audit";
 import { DEFAULT_POLICY } from "./tables";
+import { normalise } from "./tasks";
 import { hashCode, INVITE_DAYS, inviteProblem, leadProblem, newInviteCode } from "./team-rules";
-import type { Invite, Member, Role, Team } from "./types";
+import type { Invite, Member, Role, Settings, Team } from "./types";
 
 const db = () => adminTables();
 const now = () => new Date().toISOString();
@@ -102,4 +103,12 @@ export async function revokeInvite(lead: Member, inviteId: string) {
   if (!inv) return;
   await db().updateRow(DB_ID, T.invites, inv.$id, { revoked: true });
   await audit(lead.teamId, lead.$id, "invite.revoke", inv.$id);
+}
+
+/** The team policy, placed before every task prompt. Shared by the settings page and the MCP set_policy tool. */
+export async function savePolicy(lead: Member, text: string) {
+  const before = await teamRow<Settings>(T.settings, lead.teamId, lead.teamId);
+  const policy = normalise(text);
+  await db().upsertRow(DB_ID, T.settings, lead.teamId, { teamId: lead.teamId, policy });
+  await audit(lead.teamId, lead.$id, "settings.edit", lead.teamId, before?.policy, policy);
 }
