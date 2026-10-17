@@ -1,12 +1,17 @@
+import { Query } from "node-appwrite";
+import { allRows, T } from "@/lib/appwrite";
 import { requireMember } from "@/lib/auth";
 import { db, who } from "@/lib/mock";
-import { addMember, removeMember, revokeToken, saveSettings, setRole } from "@/app/actions";
+import { cancelInvite, leaveTeam, removeMember, revokeToken, saveSettings, setRole } from "@/app/actions";
+import { InviteForm } from "@/components/client";
+import type { Invite } from "@/lib/types";
 import { Badge, Card, LeadOnly, PageHeader, btn, btnPrimary, control, fmt, input, label, link } from "@/components/ui";
 
 export default async function SettingsPage() {
   const me = await requireMember();
   const s = await db();
   const lead = me.role === "lead";
+  const invites = lead ? await allRows<Invite>(T.invites, [Query.equal("teamId", me.teamId), Query.isNull("usedBy"), Query.equal("revoked", false)]) : [];
   const tokens = s.apiTokens.filter((t) => lead || t.owner === me.$id);
 
   return (
@@ -39,6 +44,20 @@ export default async function SettingsPage() {
           </ul>
         </Card>
 
+        {lead && (
+          <Card title="Invite">
+            <InviteForm />
+            <ul className="mt-3 divide-y divide-line text-sm">
+              {invites.map((i) => (
+                <li key={i.$id} className="flex items-center justify-between gap-2 py-2">
+                  <span>{i.role} <span className="text-xs text-muted">· by {who(s, i.createdBy)} · expires {fmt(i.expiresAt)}</span></span>
+                  <form action={cancelInvite}><input type="hidden" name="id" value={i.$id} /><button className={btn}>Cancel</button></form>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
         <Card title="Members" actions={!lead && <LeadOnly />}>
           <ul className="divide-y divide-line text-sm">
             {s.members.map((m) => (
@@ -59,13 +78,13 @@ export default async function SettingsPage() {
               </li>
             ))}
           </ul>
-          {lead && (
-            <form action={addMember} className="mt-4 flex flex-wrap gap-2 sm:flex-nowrap">
-              <input name="name" required placeholder="Name or email" aria-label="Name or email" className={`${control} min-w-0 flex-1`} />
-              <select name="role" aria-label="Role" className={control}><option>member</option><option>lead</option></select>
-              <button className={btnPrimary}>Invite</button>
-            </form>
-          )}
+        </Card>
+
+        <Card title="Leave team">
+          <form action={leaveTeam} className="flex items-center gap-3">
+            <button className={btn}>Leave team</button>
+            <span className="text-xs text-muted">Your MCP tokens stop working.</span>
+          </form>
         </Card>
 
         {lead && (

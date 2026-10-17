@@ -3,13 +3,13 @@
 // Later each feature can move its slice into its own actions.ts; the exports here keep the pages unchanged meanwhile.
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { ID } from "node-appwrite";
 import { adminTables, DB_ID, teamRow, T } from "@/lib/appwrite";
 import { audit } from "@/lib/audit";
 import { requireLead, requireMember } from "@/lib/auth";
+import { changeRole, createInvite, removeMember as removeMemberRow, revokeInvite } from "@/lib/teams";
 import { saveNote, saveTask as saveTaskRow } from "@/lib/tasks";
 import { createToken as newToken, revokeToken as revoke } from "@/lib/tokens";
-import type { ApiToken, Member, Role, Settings } from "@/lib/types";
+import type { ApiToken, Role, Settings } from "@/lib/types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const role = (f: FormData): Role => (str(f, "role") === "lead" ? "lead" : "member");
@@ -59,29 +59,31 @@ export async function saveSettings(f: FormData) {
   await audit(lead.teamId, lead.$id, "settings.edit", "settings", before?.policy, policy);
   done();
 }
-// ponytail: members without Appwrite users until F1 (invite by email, first-lead bootstrap).
-export async function addMember(f: FormData) {
+export async function makeInvite(_: unknown, f: FormData): Promise<{ link: string } | { error: string } | null> {
   const lead = await requireLead();
-  const m = { teamId: lead.teamId, userId: ID.unique(), name: str(f, "name"), role: role(f) };
-  const row = await db().createRow(DB_ID, T.members, ID.unique(), m);
-  await audit(lead.teamId, lead.$id, "member.add", row.$id, undefined, m);
+  const { code } = await createInvite(lead, str(f, "role") === "lead" ? "lead" : "member");
+  done();
+  return { link: `${process.env.APP_URL}/join/${code}` }; // shown once, never stored
+}
+export async function cancelInvite(f: FormData) {
+  await revokeInvite(await requireLead(), str(f, "id"));
   done();
 }
 export async function setRole(f: FormData) {
-  const lead = await requireLead();
-  const m = await teamRow<Member>(T.members, str(f, "id"), lead.teamId);
-  if (!m) return;
-  await db().updateRow(DB_ID, T.members, m.$id, { role: role(f) });
-  await audit(lead.teamId, lead.$id, "member.role", m.$id, m.role, role(f));
+  const error = await changeRole(await requireLead(), str(f, "id"), role(f));
+  if (error) throw new Error(error);
   done();
 }
 export async function removeMember(f: FormData) {
-  const lead = await requireLead();
-  const m = await teamRow<Member>(T.members, str(f, "id"), lead.teamId);
-  if (!m || m.$id === lead.$id) return; // a lead cannot remove themselves (would lock the team out)
-  await db().deleteRow(DB_ID, T.members, m.$id); // their tokens stop working: verifyBearer needs the member row
-  await audit(lead.teamId, lead.$id, "member.remove", m.$id, m);
+  const error = await removeMemberRow(await requireLead(), str(f, "id"));
+  if (error) throw new Error(error);
   done();
+}
+export async function leaveTeam() {
+  const me = await requireMember();
+  const error = await removeMemberRow(me, me.$id);
+  if (error) throw new Error(error);
+  redirect("/welcome");
 }
 /** Returns the raw token once; only its hash is stored. The token always belongs to the caller. */
 export async function createToken(_: unknown, f: FormData): Promise<{ token: string } | null> {
