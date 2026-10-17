@@ -94,8 +94,13 @@ The one tricky part is two people (or a person and a routine) taking the same wo
 
 **MCP endpoint.** Each member (and each routine) gets a personal API token created in the web app. Only its hash is stored, and it can be revoked.
 - *Claude Code (a person's session):* `claude mcp add --transport http commons https://<app>/api/mcp --header "Authorization: Bearer <token>"`.
-- *Claude routines (cloud):* routines use connectors set up in Claude. Anthropic said on 2026-08-31 that connectors now support **static headers** (up to four, from an allowlist) on Pro, Max and Team plans. **To check:** whether `Authorization` is on that allowlist. If it is not, accept the same token in an allowed custom header.
-- *Later, if needed:* full OAuth. `mcp-handler` already has `withMcpAuth` and protected-resource metadata. The authorization server could be Better Auth's MCP plugin or a hosted provider (Clerk, WorkOS). Appwrite cannot act as an OAuth provider for third-party clients, so this would be an extra piece. Not needed for the hackathon.
+- *Claude routines (cloud):* routines use connectors set up in Claude. Checked in Claude's connector authentication docs (2026-10-17): connectors support three ways to authenticate.
+  - **OAuth** (DCR or CIMD), supported by default. Each user signs in.
+  - **Request headers (`static_headers`)**: an organization Owner enters one API key or bearer token when adding the connector, and Claude sends it on every call. Standard names `authorization`, `x-api-key` and `x-auth-token` are allowed, so **`Authorization: Bearer <token>` works**. But this is **beta, for a limited set of organizations**, and it is **one key for the whole organization**: it cannot tell members apart. That fits team mode (the routine is the team's), and the routine passes its routine id in tool calls so results are attributed. **To check:** whether our organization sees the "Request headers" section when adding a connector.
+  - **No authentication**: the server accepts anyone with the URL. Not acceptable for us on its own.
+  - Tokens in the URL (`?token=`) are explicitly not to be used.
+- *If our organization does not have request headers:* we need OAuth. `mcp-handler` already has `withMcpAuth` and protected-resource metadata. The authorization server could be Better Auth's MCP plugin or a hosted provider (Clerk, WorkOS). Appwrite cannot act as an OAuth provider for third-party clients, so this is an extra piece. Claude requires a `401` with a `resource_metadata` pointer, PKCE S256, and answers within 10 seconds. A user's OAuth sign-in also identifies the member, which request headers cannot.
+- *Extra layer (optional):* Anthropic's outbound traffic comes from `160.79.104.0/21`, so the MCP route can refuse other addresses for routine calls. This is not identity, only a filter.
 
 ## 7. Web app pages
 
@@ -165,7 +170,7 @@ compute-commons/
 
 ## 12. Risks and checks before we build
 
-- `Authorization` header on Claude's connector allowlist: confirm in Claude's current connector docs (§6).
+- Connector auth (§6): `Authorization` is allowed, but request headers are a beta for a limited set of organizations and are one key per organization. Check whether our organization has it; if not, plan for OAuth.
 - Routine limits (minimum interval, daily run caps, research-preview status): confirm in Anthropic's official routine docs; our numbers come from third-party guides.
 - `node-appwrite` major for server 1.8.1: confirm in the SDK changelog.
 - Transaction behaviour on a conflicting claim (§4): test on our server.
@@ -179,6 +184,7 @@ compute-commons/
 - Vercel changelog, OAuth support in the MCP adapter: https://vercel.com/changelog/oauth-support-added-to-mcp-adapter
 - Clerk guide to an MCP server in Next.js (shows `withMcpAuth` wiring): https://clerk.com/docs/nextjs/guides/ai/mcp/build-mcp-server
 - Claude Code MCP docs (HTTP transport, `--header` bearer example): https://code.claude.com/docs/en/mcp
+- Claude connector authentication (OAuth, request headers beta, authless, allowed header names): https://claude.com/docs/connectors/building/authentication
 - Static headers for Claude connectors, Anthropic reply on 2026-08-31: https://github.com/anthropics/claude-ai-mcp/issues/112
 - Better Auth MCP plugin (possible future OAuth server): https://better-auth.com/docs/plugins/mcp
 - Package versions: `npm view <package> version`, run 2026-10-17. Appwrite server version: `https://api.rando.ge/v1/health/version`, run 2026-10-17.
