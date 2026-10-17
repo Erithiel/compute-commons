@@ -59,7 +59,45 @@ async function main() {
   assert.match(text(await call(M, "next_task")), /Nothing left/);
   assert.match(text(await call(M, "board")), /0 in progress, 0 free, 2 done/);
 
-  // (Task 5 adds the management checks here.)
+  // Management tools
+  const all = (await L.listTools()).tools.map((t) => t.name);
+  for (const n of ["list_members", "list_tasks", "view_task", "list_logs", "get_policy", "create_task", "update_task", "delete_task", "set_policy", "add_member", "set_member_role", "remove_member"]) assert.ok(all.includes(n), `missing tool ${n}`);
+
+  const people = json<Array<{ name: string; you: boolean }>>(await call(M, "list_members"));
+  assert.equal(people.find((p) => p.you)?.name, "Smoke Member");
+
+  assert.match(text(await call(M, "create_task", { title: "Nope", prompt: "x" })), /Only a team lead/);
+  assert.match(text(await call(L, "create_task", { title: "Bad", prompt: "x", assignees: ["Nobody"] })), /No member "Nobody"/);
+  assert.match(text(await call(L, "create_task", {
+    title: "Weekly audit", prompt: "Audit the site", repeatDays: 7, assignees: ["smoke member"], rows: ["acme.ge", "green.ge"],
+  })), /Created "Weekly audit"/);
+  assert.match(text(await call(L, "update_task", {
+    task: "weekly audit", prompt: "Audit the site v2", addRows: ["blue.ge"], removeRows: ["acme.ge"], addAssignees: ["Smoke Lead"],
+  })), /prompt is now v2/);
+  const view = json<{ items: Array<{ row: string }>; assignedTo: string[]; repeat: string; prompt: string }>(await call(L, "view_task", { task: "Weekly audit" }));
+  assert.deepEqual(view.items.map((i) => i.row), ["green.ge", "blue.ge"]);
+  assert.deepEqual(view.assignedTo, ["Smoke Member", "Smoke Lead"]);
+  assert.equal(view.repeat, "every 7d");
+  assert.equal(view.prompt, "Audit the site v2");
+
+  await call(L, "create_task", { title: "Member only", prompt: "x", assignees: ["Smoke Member"] });
+  const only = json<{ items: Array<{ itemId: string }> }>(await call(L, "view_task", { task: "Member only" }));
+  assert.match(text(await call(L, "claim", { itemId: only.items[0].itemId })), /assigned to other members/);
+
+  const mine = json<Array<{ outcome: string }>>(await call(L, "list_logs", { member: "Smoke Member" }));
+  assert.deepEqual(mine.map((l) => l.outcome), ["done", "done"]);
+
+  assert.match(text(await call(M, "remove_member", { member: "Smoke Lead" })), /Only a team lead/);
+  assert.match(text(await call(L, "remove_member", { member: "Smoke Lead" })), /cannot remove yourself/);
+  assert.match(text(await call(L, "add_member", { name: "Smoke Temp" })), /Added "Smoke Temp" as member/);
+  assert.match(text(await call(L, "set_member_role", { member: "smoke temp", role: "lead" })), /"Smoke Temp" is now a lead/);
+  assert.match(text(await call(L, "remove_member", { member: "Smoke Temp" })), /Removed "Smoke Temp"/);
+
+  assert.match(text(await call(M, "set_policy", { policy: "x" })), /Only a team lead/); // never set it for real: the row is shared
+  assert.match(text(await call(M, "get_policy")), /team policy/);
+
+  assert.match(text(await call(L, "delete_task", { task: "Weekly audit" })), /Deleted "Weekly audit"/);
+  assert.doesNotMatch(text(await call(L, "list_tasks")), /Weekly audit/);
 
   await Promise.all([L.close(), M.close()]);
   console.log("mcp-smoke: all checks passed");
