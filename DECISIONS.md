@@ -18,12 +18,14 @@ Short record of what the team has decided, parked or assigned. Newest at the bot
 
 | D9 | Focus | **Team mode only** for now. Clan mode is parked (design kept in `POSITIONING.md` and `security/SECURITY.md`). |
 | D10 | Web app role | The web app is a **shared library of task templates** (prompt with blanks, inputs, risk label, version) plus a task queue and routine setup. Not tied to code review or any single use. |
-| D11 | Output | **Every result lands on a branch** in a throwaway workspace; nothing touches `main`; a human reviews and merges. |
+| D11 | Output | **Every result lands on a branch** in a throwaway workspace; nothing touches `main`; a human reviews and merges. (Branch-per-result revised by D15.) |
 
 | D12 | Skills live in the app | Skills are stored and versioned on the server and served through the MCP server; teammates and routines install nothing. Each skill lists what it needs; machine readiness is the team's responsibility. |
 | D13 | Tracker in the MCP server | Work item = skill on a target, with states (available, claimed, done, failed, skipped), claim leases and optional cooldowns, plus a board. The AI chooses what to take or skip inside rules the server enforces, and reports done or failed with a summary. Runs that do not check in are not tracked. See `IDEA.md` section 5a. |
 
-| D14 | Security and roles weight | Team mode is inside a trusted startup team, so heavy security (trust ladder, security checker roles, threat model) is **not critical** and stays parked with clan mode. **Roles are a standalone permissions feature** (Lead, Member). Basic safety rules stay: branch-only output, no secrets in workspaces, bounded runs, only leads edit skills. |
+| D14 | Security and roles weight | Team mode is inside a trusted startup team, so heavy security (trust ladder, security checker roles, threat model) is **not critical** and stays parked with clan mode. **Roles are a standalone permissions feature** (Lead, Member). Basic safety rules stay: branch output (never `main`), no secrets in workspaces, bounded runs, only leads edit skills. |
+
+| D15 | Branching strategy | **The client chooses it.** Not every task or result has to be a new branch: the client picks a branch per task, per run, per target, one shared working branch, or their own convention. It is set in the team policy prefix (a routine prefix may override it). Still never a direct change to `main`; a human reviews and merges. |
 
 ## Consequences of D4 (to design)
 

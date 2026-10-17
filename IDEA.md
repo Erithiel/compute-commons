@@ -16,7 +16,7 @@ A small web app and server for a team:
 1. **A shared library of task templates.** A template is a ready-made prompt for any kind of job, with blanks to fill in. Anyone on the team can add, improve and reuse them.
 2. **A queue of tasks.** A task is a template plus its inputs ("run the SEO audit on site X", "review PR 42").
 3. **Runs when it suits the team.** A person runs a task in their own Claude Code when they have spare capacity, or a scheduled Anthropic routine works through the queue after hours.
-4. **Everything lands on a branch.** Every result is a new branch (code changes, or a report file committed to a branch). Nothing touches `main`. A human reviews and merges.
+4. **Branching is the client's choice.** The client decides the branching strategy for their workflow: a new branch per task, one branch per run or per target, a shared working branch, or whatever convention they already use. Results (code changes, or a report file) land wherever that strategy says. Nothing touches `main` directly. A human reviews and merges.
 
 It is not tied to code review or SEO. Code review and the SEO audit are just the first two templates. Anything repeatable can be a template: audits, reviews, refactors, test writing, docs, translations, data cleanups, reports.
 
@@ -30,7 +30,7 @@ Note: the weekly limit is shared, so after-hours runs still use weekly capacity.
 
 ## 4. Principles
 
-1. **Branch-only output.** Every result is a branch in a throwaway workspace. Never a direct change to `main`. A human reviews and merges.
+1. **Branch output, client's strategy.** Results go to branches in a throwaway workspace, following the branching strategy the client chose (per task, per run, per target, or a shared branch). Never a direct change to `main`. A human reviews and merges.
 2. **Humans decide.** People write or approve templates, set the schedule and budget, and review every result.
 3. **Own account, own limit.** No shared logins, no pooled subscriptions.
 4. **First-party mechanisms only.** The person's own Claude Code session or Anthropic's own routines. We do not build our own background runner that logs in on someone's behalf.
@@ -47,7 +47,7 @@ Parked for now (see `DECISIONS.md`): the terms-of-service check and a sourced "u
 3. **Run it** in one of two ways:
    - *On demand:* a person runs a skill in their own Claude Code, which fetches the next task from the server.
    - *Scheduled:* an Anthropic routine (for example every day after 18:00; cloud routines have a minimum interval of one hour) connects to our remote MCP server and works through the queue within its budget.
-4. **The run** happens in a fresh workspace (clone on a new branch, no secrets), claims the task, does the work, commits the result to the branch, and reports back.
+4. **The run** happens in a fresh workspace (a clone with no secrets, on the branch the client's strategy picks), claims the task, does the work, commits the result to that branch, and reports back.
 5. **The server shows status:** queued, running, done, failed, who or what ran it, and a link to the branch.
 6. **A human reviews** the branch and merges or discards it.
 
@@ -74,7 +74,7 @@ Limit: the tracker only knows about runs that check in. A skill run by hand with
 
 Other things to plan for:
 - Whoever can edit a skill controls what unattended routines do. Only managers edit skills; each change is a new version with a log; routines run an approved version.
-- A routine has a prefix (policy): guardrails (new branch, never touch `main`, no secrets) and output format. Order: team policy, routine prefix, skill.
+- A routine has a prefix (policy): guardrails (follow the client's branching strategy, never touch `main`, no secrets) and output format. Order: team policy, routine prefix, skill.
 - A routine = skill + prefix + targets + schedule + budget. Targets are registered by the manager (or discovered, open question). It goes through all targets by a rule ("every night"), or the manager picks one target in a simple form and runs it now. It loops in one run, because routines have daily run caps.
 - Server-hosted skills carry instructions only. If a skill also needs scripts, tools or files (for example the Rando SEO audit helpers), those must exist where the run happens, such as the repo it checks out. To check what each skill needs.
 
@@ -107,7 +107,7 @@ An optional **viewer** (read-only) and a **reviewer** (approves merges of AI bra
 
 - Unattended runs use approved templates only and trusted inputs.
 - Risk label on every template: *report only* (read-only) or *changes files* (edits in the workspace). Unattended runs prefer report-only.
-- Fresh workspace per run, no secrets, no write access to protected branches; the branch is the only output.
+- Fresh workspace per run, no secrets, no write access to protected branches; branches (per the client's strategy) are the only output.
 - Inputs can still contain prompt injection (for example code under review). So review runs should have no secrets and minimal tools.
 - Budget and timeout on every run; the run stops itself.
 - Human review before anything merges. AI review and AI changes are advice.
@@ -135,7 +135,7 @@ The public version: groups of people (clans) with vetted roles picking up cleare
 
 1. Who can create and edit templates: only the lead, or any member? Who approves for unattended runs?
 2. What limits a routine's run: number of tasks, time, or a usage threshold?
-3. Where do results go: always a branch, or also a comment or report page?
+3. Where do results go: always a branch, or also a comment or report page? Which branching strategies do we offer clients by default, and where is the choice set (per team, per routine, per template)?
 4. How is the queue tracked: our own database, or GitHub issues?
 5. How do people run a task on demand: copy-paste first, or a skill that fetches the next task?
 6. Which templates make the first demo: SEO audit and code review?
@@ -148,4 +148,4 @@ The public version: groups of people (clans) with vetted roles picking up cleare
 
 ## 13. Origin notes
 
-From a voice discussion on 2026-10-17: many people leave part of their subscription unused; the first sketch was a skill and server that queue tasks and spend spare limit. Refinements: user-controlled and first-party runs only, a social anti-concentration mission, then a focus on teams, with a shared template library, scheduled routines and branch-only output.
+From a voice discussion on 2026-10-17: many people leave part of their subscription unused; the first sketch was a skill and server that queue tasks and spend spare limit. Refinements: user-controlled and first-party runs only, a social anti-concentration mission, then a focus on teams, with a shared template library, scheduled routines and branch-only output; later, the branching strategy became the client's choice.

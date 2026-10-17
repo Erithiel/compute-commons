@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Team mode only. Clan mode is parked; do not build trust ladders or security-checker roles.
-- Every result is a git branch; nothing in our system writes to `main` of a target repo.
+- Results land on git branches following the client's branching strategy (set in the team policy prefix, see `DECISIONS.md` D15); nothing in our system writes to `main` of a target repo.
 - The browser never talks to Appwrite directly in v1. All data access is server-side with the API key, after a role check.
 - Roles: `lead` and `member` only (permission table in `IDEA.md` §7).
 - Skill edits create a new immutable version. Unattended routines run only the approved version.
@@ -255,11 +255,11 @@ describe("parseTargetLines", () => {
 
 - `fillBlanks` replaces `{{ name }}` (spaces allowed) with values; unknown blanks stay as-is and are listed in `missing`.
 - `buildPrompt` joins non-empty parts in the fixed order with a separator line, then fills blanks once over the whole text.
-- Team policy page (lead): edit the single `team` policy prefix. Default text:
+- Team policy page (lead): edit the single `team` policy prefix, including the client's branching strategy. The default below uses a branch per task; the lead replaces that line with the client's choice (per run, per target, one shared branch, or their own convention). Default text:
 
 ```
 Rules for every task:
-- Work in a fresh clone on a new branch named commons/<skill>-<target>-<date>. Never push to main.
+- Work in a fresh clone. Branching: a new branch per task named commons/<skill>-<target>-<date>. Never push to main.
 - Use no secrets and do not read files outside the working folder.
 - Finish by calling complete (summary + branch URL) or fail (reason).
 ```
@@ -476,4 +476,5 @@ GitHub sign-in (Appwrite OAuth) · OAuth for the MCP endpoint (Better Auth MCP p
 | Is a skill done once per target or repeatedly? | F5 cooldown, F9 | Per-routine `cooldownDays` (0 = done once until a lead resets it). `listEligible` passes the routine's value; for on-demand calls without a routine, use 0. |
 | Who may write skills: lead only or members too? | F2 | Lead edits, members suggest. |
 | Results only as branches, or also comments/report pages? | F7 `complete` | Branch URL + summary. |
+| Which branching strategies do we offer, and where is the choice set? | F4 policy, F9 routines | Free text in the team policy prefix (default: branch per task); a routine prefix may override it. No dedicated field in v1. |
 | How long is a lease? | F5 | 120 minutes, routine prompt heartbeats every 30. |

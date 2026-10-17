@@ -14,7 +14,8 @@
                               list work · get skill · claim · heartbeat · complete · fail · skip · board
 
  The actual work (running a skill on a target) happens inside Claude, in a fresh workspace,
- and its result is a git branch. Our server only stores skills, targets, claims and results.
+ and its result lands on a git branch picked by the client's branching strategy.
+ Our server only stores skills, targets, claims and results.
 ```
 
 One Next.js project holds the web app, the API and the MCP endpoint. Appwrite is the database and the login system. Anthropic routines are the scheduler, so we run no background jobs.
@@ -50,7 +51,7 @@ One database, `commons`. v1 serves one team, and every row carries `teamId` so m
 | `members` | `userId` (Appwrite user), `teamId`, `role` (`lead` \| `member`), `name` | Roles are the simple permissions feature (IDEA §7). |
 | `skills` | `teamId`, `slug`, `title`, `description`, `currentVersion`, `approvedVersion`, `requires` (list: tools, keys) | Unattended routines run `approvedVersion` only. |
 | `skill_versions` | `skillId`, `version`, `prompt` (markdown with `{{blanks}}`), `inputs` (JSON schema), `riskLabel` (`report-only` \| `changes-files`), `authorId`, `createdAt` | Immutable. Editing a skill creates a new row. |
-| `policies` | `teamId`, `scope` (`team` \| `routine`), `prefix` (markdown) | Guardrail text placed before every task. Order: team, then routine, then skill. |
+| `policies` | `teamId`, `scope` (`team` \| `routine`), `prefix` (markdown) | Guardrail text placed before every task. Order: team, then routine, then skill. The team prefix holds the client's branching strategy (branch per task, per run, per target, or one shared branch); a routine prefix may override it. |
 | `targets` | `teamId`, `kind` (free text: site, repo, file, ticket…), `name`, `ref` (URL or path), `tags` | Websites are just one kind. |
 | `routines` | `teamId`, `name`, `skillId`, `targetFilter` (tags or explicit ids), `policyId`, `budget` (max items, minutes), `cooldownDays`, `enabled` | Configuration only. The schedule itself is set in Claude's routines; this row is what the routine asks for. |
 | `work_items` | `teamId`, `skillId`, `targetId`, `status` (`available` \| `done` \| `failed` \| `skipped`), `lastDoneAt`, `lastResultId`, `priority` | One row per skill × target. Created when a routine or a lead adds targets to a skill. |
@@ -123,7 +124,7 @@ You are running the "<routine name>" routine for our team.
 Use the "commons" MCP connector.
 1. Call list_work for routine "<routine id>".
 2. Pick the first eligible item, claim it, then call get_skill for it and follow it exactly.
-   Work in a fresh clone on a new branch. Never push to main. Use no secrets.
+   Work in a fresh clone and follow the branching strategy in the policy. Never push to main. Use no secrets.
 3. Call heartbeat at least every 30 minutes on long items.
 4. Finish with complete (summary + branch URL) or fail (reason).
 5. Repeat until list_work is empty or the routine's budget is used up, then stop.
