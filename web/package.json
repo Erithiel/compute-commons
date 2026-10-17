@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "setup:appwrite": "tsx --env-file=.env.local scripts/setup-appwrite.ts",
+    "link-member": "tsx --env-file=.env.local scripts/link-member.ts",
     "test": "vitest run",
     "race-test": "tsx --env-file=.env.local --conditions=react-server scripts/race-test.ts"
   },

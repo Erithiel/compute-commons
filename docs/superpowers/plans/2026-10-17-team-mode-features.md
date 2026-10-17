@@ -18,7 +18,7 @@ A **task** is a **title and a prompt**. The prompt can ask for anything; our app
 
 A clickable **mock UI** exists in `web/` and already follows this plan:
 - Pages: Board (read-only), Tasks (list + editor with a rows table), Logs, Connect Claude (`/setup`), Settings, Login. Data comes from an in-memory store, `web/lib/mock.ts`, which resets on restart. Mock server actions are in `web/app/actions.ts`. `web/lib/types.ts` matches §3.1.
-- **Backend is live (2026-10-17):** `npm run setup:appwrite` created the schema; `lib/tasks.ts`, `lib/claims.ts`, `lib/tokens.ts`, `lib/prompt.ts`, `lib/audit.ts` are implemented with tests; `app/actions.ts` writes to Appwrite; `lib/mock.ts` no longer holds data, it loads a per-request snapshot from Appwrite and keeps the page helpers (rename to `lib/data.ts` once the UI rework settles). Login is still the mock member picker (F1). `TEAM_ID=race-test npm run race-test` passes on 1.8.1.
+- **Backend is live (2026-10-17):** `npm run setup:appwrite` created the schema; `lib/tasks.ts`, `lib/claims.ts`, `lib/tokens.ts`, `lib/prompt.ts`, `lib/audit.ts` are implemented with tests; `app/actions.ts` writes to Appwrite; `lib/mock.ts` no longer holds data, it loads a per-request snapshot from Appwrite and keeps the page helpers (rename to `lib/data.ts` once the UI rework settles). Login is real (accounts, teams and invites: `2026-10-17-accounts-and-teams.md`). `npm run race-test` (own team "race-test") passes on 1.8.1.
 - **How a feature replaces the mock:** keep the page, swap its data calls and actions for Appwrite, move its actions into the feature's own `actions.ts`, and delete its slice of `mock.ts`. When `mock.ts` is empty, delete it and the "mock data" badge in the sidebar.
 - **Pages use route groups:** `web/app/(app)/<page>` for signed-in pages, sharing the sidebar layout and auth guard, and `web/app/(auth)/login`.
 - **Appwrite is connected:** project `hakatoni` (`6ad3926b000731cc9576`) on api.rando.ge. The sidebar pings it on every load. `node-appwrite` is pinned to **22.1.3**, the last SDK built for API 1.8.1; its `ping()` returns `{ message: "Pong!" }`, not a string. An API key is still needed in `web/.env.local`.
@@ -132,13 +132,13 @@ export interface ApiToken { $id: string; owner: string /* memberId */; scheduled
 export interface AuditEntry { $id: string; teamId: string; actor: string; action: string; entity: string; before: string | null; after: string | null; at: string }
 ```
 
-Notes: `teamId` is a constant from env in v1 (`TEAM_ID`). Using one shape for both cases (a task without rows has a single hidden item `""`) keeps the claim engine to one code path. Logs copy the row text, so removing a row never breaks history.
+Notes: `teamId` comes from the signed-in member's team. Using one shape for both cases (a task without rows has a single hidden item `""`) keeps the claim engine to one code path. Logs copy the row text, so removing a row never breaks history.
 
 ### 3.2 Module signatures
 
 | Module | Owner | Exports |
 |---|---|---|
-| `web/lib/appwrite.ts` | F0 | `adminTables(): TablesDB`, `adminUsers(): Users`, `sessionAccount(): Promise<Account \| null>`, `ping(): Promise<boolean>`, `DB_ID`, `T` (table ids: `T.members`, `T.tasks`, `T.taskVersions`, `T.taskItems`, `T.memberNotes`, `T.claims`, `T.takeovers`, `T.logs`, `T.settings`, `T.apiTokens`, `T.audit`), `TEAM_ID` |
+| `web/lib/appwrite.ts` | F0 | `adminTables(): TablesDB`, `adminUsers(): Users`, `sessionAccount(): Promise<Account \| null>`, `ping(): Promise<boolean>`, `DB_ID`, `T` (table ids: `T.members`, `T.tasks`, `T.taskVersions`, `T.taskItems`, `T.memberNotes`, `T.claims`, `T.takeovers`, `T.logs`, `T.settings`, `T.apiTokens`, `T.audit`) |
 | `web/lib/audit.ts` | F0 | `audit(actor: string, action: string, entity: string, before?: unknown, after?: unknown): Promise<void>` |
 | `web/lib/auth.ts` | F1 (stub in F0) | `getMember(): Promise<Member \| null>`, `requireMember(): Promise<Member>`, `requireLead(): Promise<Member>` (throw `Forbidden`) |
 | `web/lib/tasks.ts` | F2 | `nextVersion(current: number): number`, `cleanRows(texts: string[]): string[]`, `syncItems(taskId: string, rows: string[]): Promise<void>`, `getNote(taskId: string, memberId: string): Promise<string>`, `saveNote(taskId: string, memberId: string, text: string): Promise<void>` (empty text deletes) |
@@ -171,7 +171,6 @@ APPWRITE_ENDPOINT=https://api.rando.ge/v1
 APPWRITE_PROJECT_ID=6ad3926b000731cc9576
 APPWRITE_API_KEY=
 APPWRITE_DATABASE_ID=commons
-TEAM_ID=rando
 SESSION_COOKIE_NAME=commons_session
 ```
 
@@ -189,6 +188,8 @@ SESSION_COOKIE_NAME=commons_session
 **Acceptance:** preview URL shows the shell with "Appwrite: connected"; `npm run setup:appwrite` creates all tables on a fresh project and is a no-op the second time; CI is green.
 
 ### F1 — Auth & members
+
+**Replaced by `2026-10-17-accounts-and-teams.md`.** The text below is the original plan, kept for history.
 
 **Depends on:** F0.
 **Files:** `web/app/(auth)/login/page.tsx`, `web/app/(auth)/login/actions.ts`, `web/lib/auth.ts` (replace stub), `web/proxy.ts` (Next.js 16 renamed `middleware.ts` to `proxy.ts`; check the bundled docs in `node_modules/next/dist/docs`), `web/app/(app)/settings/members/*`.

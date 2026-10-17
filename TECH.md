@@ -44,11 +44,14 @@ Not using, on purpose:
 
 ## 3. Data model (Appwrite TablesDB)
 
-One database, `commons`. v1 serves one team, and every row carries `teamId` so more teams can be added later without migration.
+One database, `commons`. Every table except `teams`, `login_attempts` and `claim_takeovers` has a `teamId`, and every read and write filters by the caller's `teamId`; `settings` row id = team id. A row from another team counts as "not found".
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `members` | `userId` (Appwrite user), `teamId`, `role` (`lead` \| `member`), `name` | Roles are the simple permissions feature (IDEA §7). |
+| `teams` | `name`, `createdBy`, `createdAt` | One row per team. Its id is the `teamId` everywhere else. |
+| `invites` | `teamId`, `role`, `codeHash`, `createdBy`, `expiresAt`, `usedBy`, `usedAt`, `revoked` | One-time join link, valid 7 days. Only the SHA-256 hash of the code is stored (D27). |
+| `login_attempts` | **row id = sha256(email) prefix**, `fails`, `windowStart` | Login throttle: 5 failures per 15 minutes per email (D28). |
+| `members` | `userId` (Appwrite user, unique: one team per account), `teamId`, `role` (`lead` \| `member`), `name` | Roles are the simple permissions feature (IDEA §7). A team always keeps at least one lead. |
 | `tasks` | `teamId`, `title`, `repeatDays` (0 = once), `assignees` (member ids; empty = anyone), `currentVersion` | A task is a title and a prompt that can ask for anything (D22). Every run uses the latest prompt version. |
 | `task_versions` | `taskId`, `version`, `prompt` (free text), `authorId`, `createdAt` | Immutable history. Editing a task's prompt creates a new row. |
 | `member_notes` | `taskId`, `memberId`, `text`, `updatedAt` | A member's own addition to a task's prompt (e.g. where their files are). Only that member's Claude receives it (D24). Unique per task + member. |
@@ -96,7 +99,13 @@ The server also sends `instructions` (the workflow: next_task → work → heart
 
 ## 6. Authentication
 
-**Web app.** Appwrite email + password, using the SSR pattern: a server action creates the session with `node-appwrite` and stores it in an httpOnly cookie. GitHub sign-in can be added later through Appwrite's OAuth providers (a feature, not a requirement).
+**Web app.** Accounts are Appwrite email + password users (D26). `lib/auth.ts` creates the session on the server with the API key and keeps its secret in an httpOnly cookie (`SESSION_COOKIE_NAME`, `sameSite: lax`, `secure` in production, expiring with the session). Every later request acts as that user. API-key calls skip Appwrite's rate limits, so `lib/auth.ts` counts failed logins itself: 5 failures per 15 minutes per email lock that email (D28). Refusals (wrong password, locked, bad invite) return `{ error }` to the form instead of throwing, because production builds hide thrown messages. `?next=` after login accepts only same-site paths. GitHub sign-in can be added later through Appwrite's OAuth providers.
+
+- *Pages:* `/login`, `/signup`, `/welcome` (a new account creates a team and becomes its lead) and `/join/[code]`.
+- *Invite links (D27):* a lead makes a one-time link in Settings (`APP_URL/join/<code>`, role chosen, valid 7 days, hash stored). There is no email sending. Settings also changes roles, removes members, and lets a member leave. Each of these writes an audit entry.
+- *Early redirect:* `proxy.ts` sends visitors without the cookie to `/login`. It is only a shortcut; `lib/auth.ts` checks the session and the team on every request.
+- *Code:* `lib/auth.ts` (session, throttle), `lib/teams.ts` (create team, invites, roles), `lib/team-rules.ts` (pure rules, tested).
+- *Existing sample data:* after signing up, `npm run link-member -- <memberId> <email>` attaches a sample member row (m1, m2, m3) to that account, so the person keeps its role, notes, logs and tokens. The account must not be in a team yet.
 
 **MCP endpoint.** Each member (and each routine) gets a personal API token created in the web app. Only its hash is stored, and it can be revoked.
 - *Claude Code (a person's session):* `claude mcp add --transport http commons https://<app>/api/mcp --header "Authorization: Bearer <token>"`.
@@ -161,6 +170,7 @@ compute-commons/
 | `APPWRITE_API_KEY` | Vercel + local (server only) | Scoped to this project's databases and users. Never in the repo. |
 | `APPWRITE_DATABASE_ID` | Vercel + local | `commons` |
 | `SESSION_COOKIE_NAME` | optional | Defaults to `commons_session`. |
+| `APP_URL` | Vercel + local | Public address of the app, used to build invite links (`http://localhost:3000` locally). |
 
 ## 11. Build order for the hackathon
 
