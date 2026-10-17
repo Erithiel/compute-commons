@@ -11,7 +11,7 @@
                               │
  Claude Code session  ──┐     ▼
  Claude routine (cloud) ─┴─► /api/mcp  (MCP server inside the same Next.js app)
-                              list work · get task · claim · heartbeat · complete · fail · skip · board
+                              next task · list work · get task · claim · heartbeat · complete · fail · skip · board
 
  The actual work (doing a task, or one item of its list) happens inside Claude, in a fresh workspace,
  and its result goes wherever the task prompt says (a doc, a message, a branch…); Claude reports it in the log.
@@ -49,13 +49,13 @@ One database, `commons`. v1 serves one team, and every row carries `teamId` so m
 | Table | Key columns | Notes |
 |---|---|---|
 | `members` | `userId` (Appwrite user), `teamId`, `role` (`lead` \| `member`), `name` | Roles are the simple permissions feature (IDEA §7). |
-| `tasks` | `teamId`, `title`, `description`, `mode` (`once` \| `routine`), `redoDays`, `items` (optional list of strings), `priority`, `currentVersion`, `approvedVersion` | Any repeatable job, not only code (D16, D17). Schedules only take tasks with an approved version. |
+| `tasks` | `teamId`, `title`, `description`, `mode` (`once` \| `routine`), `redoDays`, `items` (optional list of strings), `assignees` (member ids; empty = anyone), `priority`, `currentVersion` | Any repeatable job, not only code (D16, D17). Every run uses the latest prompt version. |
 | `task_versions` | `taskId`, `version`, `prompt` (markdown, may use `{{item}}`), `authorId`, `createdAt` | Immutable. Editing a task's prompt creates a new row. |
 | `task_items` | `teamId`, `taskId`, `item` (one line of the list, `""` when there is none), `status` (`available` \| `done` \| `failed` \| `skipped`), `lastDoneAt`, `lastLogId` | The unit of work and of claiming. One row per list line. |
-| `claims` | **row id = task item id**, `by` (member id or `team`), `claimedAt`, `leaseUntil` | The lock. See §4. |
-| `logs` | `taskItemId`, `taskId`, `by`, `outcome` (`done` \| `failed` \| `skipped`), `summary`, `details` (free text: what was done, where the result is), `version`, `startedAt`, `finishedAt` | Who did what, when. The board's and the Logs page's data. |
-| `settings` | `teamId`, `policy` (markdown), `maxItemsPerRun`, `maxMinutesPerRun` | One row. The policy goes before every task prompt (rules such as how to deliver results; for code teams, the branching strategy, D15). The budget is returned to schedules by `list_work`. |
-| `api_tokens` | `owner` (member id or `team`), `name`, `tokenHash`, `lastUsedAt`, `revoked` | MCP access (§6). Store the hash only. |
+| `claims` | **row id = task item id**, `by` (member id), `scheduled`, `claimedAt`, `leaseUntil` | The lock. See §4. |
+| `logs` | `taskItemId`, `taskId`, `by` (member id), `scheduled`, `outcome` (`done` \| `failed` \| `skipped`), `summary`, `details` (free text: what was done, where the result is), `version`, `startedAt`, `finishedAt` | Who did what, when. The board's and the Logs page's data. |
+| `settings` | `teamId`, `policy` (markdown) | One row. The policy goes before every task prompt (rules such as how to deliver results; for code teams, the branching strategy, D15). |
+| `api_tokens` | `owner` (member id), `scheduled` (made for a Claude schedule), `name`, `tokenHash`, `lastUsedAt`, `revoked` | MCP access (§6). Store the hash only. |
 | `audit_log` | `teamId`, `actor`, `action`, `entity`, `before`, `after`, `at` | Every change to tasks, settings, members and tokens. |
 
 Permissions: the browser never talks to Appwrite directly in v1. Server code uses an API key and checks the member's role before every write. Table-level permissions stay closed to clients.
@@ -68,7 +68,7 @@ The one tricky part is two people (or a person and a schedule) taking the same t
 - **Expired leases:** if the create fails, read the existing claim. If `leaseUntil` is in the past, delete it and create ours **inside one Appwrite transaction**. If two claimers race for the same stale claim, the transaction's conflict detection should let only one commit. This needs a quick test against our 1.8.1 server before we rely on it.
 - **Heartbeat:** long runs call `heartbeat` to push `leaseUntil` forward (default lease 2 hours, a setting).
 - **Finish:** `complete`, `fail` or `skip` writes a `logs` row, updates the `task_items` status, and deletes the claim, in one transaction.
-- **Eligibility** (decided by the server, not the AI): not claimed (or lease expired), not done (one-off) or past `lastDoneAt + redoDays` (routine), the task has an approved version (for schedules), the caller's role allows it.
+- **Eligibility** (decided by the server, not the AI): not claimed (or lease expired), not done (one-off) or past `lastDoneAt + redoDays` (routine), the caller is assigned (or the task has no assignees).
 
 ## 5. MCP server
 
@@ -78,16 +78,17 @@ The one tricky part is two people (or a person and a schedule) taking the same t
 
 | Tool | Input | Does |
 |---|---|---|
-| `list_work` | `limit?` | Eligible task items with task title, item, last log and suggested order, plus the run's budget. The AI chooses from these. |
-| `get_task` | `itemId` | Merged prompt: team policy + task prompt (approved version for schedules), with `{{item}}` filled in. |
-| `claim` | `itemId` | Atomic claim (§4). Returns the lease end time, or "taken". |
+| `list_work` | `limit?` | Eligible task items with task title, item, last log and suggested order. For choosing a specific item. |
+| `get_task` | `itemId` | Merged prompt: team policy + task prompt (latest version), with `{{item}}` filled in. |
+| `next_task` | – | Main path for schedules: the server picks the highest-priority free item, claims it and returns its prompt. Nothing left → empty. |
+| `claim` | `itemId` | Claim a specific item (§4). Re-checks it is still eligible; returns the lease end time, or "taken" / "done". |
 | `heartbeat` | `itemId` | Extends the lease. |
 | `complete` | `itemId`, `summary`, `details?` | Writes a "done" log. |
 | `fail` | `itemId`, `reason` | Writes a "failed" log and frees the item. |
 | `skip` | `itemId`, `reason` | The AI decided not to take it. Logged so the lead can see why. |
 | `board` | – | Who is working on what, what is free, recent logs. |
 
-The server also sends `instructions` (the workflow: list → claim → get_task → heartbeat → complete/fail/skip → stop at budget) when Claude connects.
+The server also sends `instructions` (the workflow: next_task → work → heartbeat → complete/fail/skip → repeat until empty) when Claude connects.
 
 ## 6. Authentication
 
@@ -97,7 +98,7 @@ The server also sends `instructions` (the workflow: list → claim → get_task 
 - *Claude Code (a person's session):* `claude mcp add --transport http commons https://<app>/api/mcp --header "Authorization: Bearer <token>"`.
 - *Claude routines (cloud):* routines use connectors set up in Claude. Checked in Claude's connector authentication docs (2026-10-17): connectors support three ways to authenticate.
   - **OAuth** (DCR or CIMD), supported by default. Each user signs in.
-  - **Request headers (`static_headers`)**: an organization Owner enters one API key or bearer token when adding the connector, and Claude sends it on every call. Standard names `authorization`, `x-api-key` and `x-auth-token` are allowed, so **`Authorization: Bearer <token>` works**. But this is **beta, for a limited set of organizations**, and it is **one key for the whole organization**: it cannot tell members apart. That fits team mode: the schedule uses the team's token, and its logs are recorded as "team schedule". **To check:** whether our organization sees the "Request headers" section when adding a connector.
+  - **Request headers (`static_headers`)**: an organization Owner enters one API key or bearer token when adding the connector, and Claude sends it on every call. Standard names `authorization`, `x-api-key` and `x-auth-token` are allowed, so **`Authorization: Bearer <token>` works**. But this is **beta, for a limited set of organizations**, and it is **one key for the whole organization**: it cannot tell members apart. So a cloud routine's runs are all attributed to the person whose token was entered. For per-person attribution, each person runs their schedule from their own Claude Code with their own token (`claude mcp add … --header`). **To check:** whether our organization sees the "Request headers" section when adding a connector.
   - **No authentication**: the server accepts anyone with the URL. Not acceptable for us on its own.
   - Tokens in the URL (`?token=`) are explicitly not to be used.
 - *If our organization does not have request headers:* we need OAuth. `mcp-handler` already has `withMcpAuth` and protected-resource metadata. The authorization server could be Better Auth's MCP plugin or a hosted provider (Clerk, WorkOS). Appwrite cannot act as an OAuth provider for third-party clients, so this is an extra piece. Claude requires a `401` with a `resource_metadata` pointer, PKCE S256, and answers within 10 seconds. A user's OAuth sign-in also identifies the member, which request headers cannot.
@@ -109,10 +110,10 @@ The server also sends `instructions` (the workflow: list → claim → get_task 
 |---|---|---|
 | `/login` | everyone | Email + password. |
 | `/board` | everyone | Task items: free, claimed (who, until when), done (summary), failed (reason). Quick "add task". |
-| `/tasks` | lead edits, members read | Task list and editor: title, description, **prompt**, one-off or routine (redo after N days), optional item list, priority; version history, approve, preview. |
+| `/tasks` | lead edits, members read | Task list and editor: title, description, **prompt**, one-off or routine (redo after N days), optional item list, assigned to (members), priority; prompt history, preview. |
 | `/logs` | everyone | Who executed what: when, who, task, item, outcome, duration, summary; expand for details. |
 | `/setup` | everyone | **Connect Claude**, once: create a token, guide to add the connector, and **"copy prompt"** for the Claude scheduled task. |
-| `/settings` | lead | Members and roles, team policy, run budget, API tokens. |
+| `/settings` | lead | Members and roles, team policy, API tokens. |
 | `/settings/tokens` | everyone | Create or revoke your own MCP token; shows the `claude mcp add` command. |
 
 ## 8. What a Claude schedule looks like
@@ -124,9 +125,8 @@ Use the "commons" MCP connector and work through our team's task queue.
 ```
 
 Everything else comes from our server, so changing a task or the rules changes what tonight's run does without re-pasting:
-- **How to work** (list → claim → get_task → heartbeat → complete/fail/skip → stop at budget) is the MCP server's `instructions`, sent when Claude connects.
+- **How to work** (next_task → work → heartbeat → complete/fail/skip → repeat until empty) is the MCP server's `instructions`, sent when Claude connects.
 - **The task itself** (team policy + task prompt, with `{{item}}` filled in) comes from `get_task`.
-- **The budget** comes back from `list_work`.
 
 ## 9. Repository layout
 
@@ -165,7 +165,7 @@ compute-commons/
 1. **Setup:** Next.js app in `web/`, Tailwind + shadcn, Appwrite project, `setup-appwrite.ts` creates the tables.
 2. **Claim logic first:** `lib/claims.ts` with a vitest test, and one manual race test against the real 1.8.1 server (two claims at once, an expired lease).
 3. **MCP endpoint:** the eight tools with token auth. Test with the MCP Inspector and with `claude mcp add` from a laptop.
-4. **Minimum web app:** login, tasks (textarea editor + item list + approve), board, logs.
+4. **Minimum web app:** login, tasks (textarea editor + item list + assignees), board, logs.
 5. **Schedule:** Connect Claude page; set up one real Claude scheduled task running a real task over a 3–5 item list.
 6. **Demo polish:** board refreshes, result links, version history. Everything else goes on the roadmap slide.
 

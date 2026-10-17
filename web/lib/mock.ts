@@ -20,17 +20,17 @@ function seed() {
     { $id: "m2", teamId: TEAM, userId: "u2", name: "Nino", role: "member" },
     { $id: "m3", teamId: TEAM, userId: "u3", name: "Giorgi", role: "member" },
   ];
-  const task = (id: string, title: string, description: string, mode: Task["mode"], redoDays: number, items: string[], approvedVersion: number | null, currentVersion = 1, priority = 0): Task =>
-    ({ $id: id, teamId: TEAM, title, description, mode, redoDays, items, priority, currentVersion, approvedVersion });
+  const task = (id: string, title: string, description: string, mode: Task["mode"], redoDays: number, items: string[], assignees: string[] = [], currentVersion = 1, priority = 0): Task =>
+    ({ $id: id, teamId: TEAM, title, description, mode, redoDays, items, assignees, priority, currentVersion });
   const tasks = [
     task("k1", "Client brief for each new lead", "One page per lead before the first sales call.", "once", 0,
-      ["Acme Logistics (acme.ge)", "Green Cafe (greencafe.ge)", "Tbilisi Tours (tbilisitours.ge)"], 1, 1, 5),
+      ["Acme Logistics (acme.ge)", "Green Cafe (greencafe.ge)", "Tbilisi Tours (tbilisitours.ge)"], ["m2", "m3"], 1, 5),
     task("k2", "Weekly competitor price check", "Track what competitors charge for website packages.", "routine", 7,
-      ["webstudio.ge", "sitemakers.ge"], 1),
+      ["webstudio.ge", "sitemakers.ge"], ["m1"]),
     task("k3", "Enable the SEO skill on every client site", "Each client site should have the SEO skill installed.", "once", 0,
-      ["freshsupply.ge", "bakery42.ge"], 1, 2),
-    task("k4", "Translate the October newsletter to Georgian", "For the Georgian mailing list.", "once", 0, [], null),
-    task("k5", "Clean the customers spreadsheet", "Remove duplicates and fix date formats.", "once", 0, [], 1),
+      ["freshsupply.ge", "bakery42.ge"], [], 2),
+    task("k4", "Translate the October newsletter to Georgian", "For the Georgian mailing list.", "once", 0, [], ["m2"]),
+    task("k5", "Clean the customers spreadsheet", "Remove duplicates and fix date formats.", "once", 0, []),
   ];
   const v = (taskId: string, version: number, prompt: string, daysAgo: number): TaskVersion =>
     ({ $id: `${taskId}v${version}`, taskId, version, prompt, authorId: "m1", createdAt: ago(daysAgo * 24 * H) });
@@ -56,39 +56,39 @@ function seed() {
     it("i9", "k5", "", "skipped", null, "l4"),
   ];
   const claims: Claim[] = [
-    { $id: "i2", by: "m2", claimedAt: ago(0.5 * H), leaseUntil: ahead(1.5 * H) },
-    { $id: "i6", by: "team", claimedAt: ago(0.2 * H), leaseUntil: ahead(1.8 * H) },
+    { $id: "i2", by: "m2", scheduled: false, claimedAt: ago(0.5 * H), leaseUntil: ahead(1.5 * H) },
+    { $id: "i6", by: "m3", scheduled: true, claimedAt: ago(0.2 * H), leaseUntil: ahead(1.8 * H) },
   ];
   const logs: Log[] = [
-    { $id: "l1", taskItemId: "i1", taskId: "k1", by: "team", outcome: "done", summary: "Brief ready: mid-size logistics firm, outdated site, no online booking.", details: `Acme Logistics runs trucking between Tbilisi and Batumi (12 trucks).
+    { $id: "l1", taskItemId: "i1", taskId: "k1", by: "m2", scheduled: true, outcome: "done", summary: "Brief ready: mid-size logistics firm, outdated site, no online booking.", details: `Acme Logistics runs trucking between Tbilisi and Batumi (12 trucks).
 Likely needs: an online quote form, a Georgian/English site, Google Maps listing.
 Call ideas: 1) show a quote-form demo, 2) compare with their competitor's site, 3) offer a small first project.`, version: 1, startedAt: ago(21 * H), finishedAt: ago(20 * H) },
-    { $id: "l2", taskItemId: "i3", taskId: "k1", by: "m3", outcome: "failed", summary: "Website is down, not enough public info for a brief.", details: `tbilisitours.ge returns 503. Their Facebook page has no posts since 2024.
+    { $id: "l2", taskItemId: "i3", taskId: "k1", by: "m3", scheduled: false, outcome: "failed", summary: "Website is down, not enough public info for a brief.", details: `tbilisitours.ge returns 503. Their Facebook page has no posts since 2024.
 Needs a human: ask the lead for a contact or another source.`, version: 1, startedAt: ago(5 * H), finishedAt: ago(4.8 * H) },
-    { $id: "l3", taskItemId: "i4", taskId: "k2", by: "team", outcome: "done", summary: "Basic package went up from 900 to 1,100 GEL.", details: `Basic: 1,100 GEL (was 900) - 5 pages, hosting 1 year.
+    { $id: "l3", taskItemId: "i4", taskId: "k2", by: "m1", scheduled: true, outcome: "done", summary: "Basic package went up from 900 to 1,100 GEL.", details: `Basic: 1,100 GEL (was 900) - 5 pages, hosting 1 year.
 Business: 2,400 GEL (unchanged).
 New: "SEO add-on" for 300 GEL/month.`, version: 1, startedAt: ago(31 * H), finishedAt: ago(30 * H) },
-    { $id: "l4", taskItemId: "i9", taskId: "k5", by: "m2", outcome: "skipped", summary: "Spreadsheet is being re-exported this week; retry later.", details: null, version: 1, startedAt: ago(19 * H), finishedAt: ago(19 * H) },
+    { $id: "l4", taskItemId: "i9", taskId: "k5", by: "m2", scheduled: false, outcome: "skipped", summary: "Spreadsheet is being re-exported this week; retry later.", details: null, version: 1, startedAt: ago(19 * H), finishedAt: ago(19 * H) },
   ];
-  const settings: Settings = { $id: "settings", teamId: TEAM, policy: DEFAULT_POLICY, maxItemsPerRun: 5, maxMinutesPerRun: 90 };
+  const settings: Settings = { $id: "settings", teamId: TEAM, policy: DEFAULT_POLICY };
   const apiTokens: ApiToken[] = [
-    { $id: "k1", owner: "m1", name: "laptop", tokenHash: "mock", lastUsedAt: ago(2 * H), revoked: false },
-    { $id: "k2", owner: "team", name: "Nightly schedule", tokenHash: "mock", lastUsedAt: ago(0.2 * H), revoked: false },
+    { $id: "k1", owner: "m1", scheduled: false, name: "laptop", tokenHash: "mock", lastUsedAt: ago(2 * H), revoked: false },
+    { $id: "k2", owner: "m1", scheduled: true, name: "Nightly schedule", tokenHash: "mock", lastUsedAt: ago(0.2 * H), revoked: false },
   ];
   const audit: AuditEntry[] = [
-    { $id: "a1", teamId: TEAM, actor: "m1", action: "task.approve", entity: "k2", before: null, after: "1", at: ago(6 * 24 * H) },
+    { $id: "a1", teamId: TEAM, actor: "m1", action: "task.create", entity: "k2", before: null, after: "1", at: ago(6 * 24 * H) },
     { $id: "a2", teamId: TEAM, actor: "m1", action: "task.edit", entity: "k3", before: "1", after: "2", at: ago(24 * H) },
   ];
   return { members, tasks, taskVersions, taskItems, claims, logs, settings, apiTokens, audit };
 }
 
 type Store = ReturnType<typeof seed>;
-const g = globalThis as unknown as { __commonsMock4?: Store };
+const g = globalThis as unknown as { __commonsMock7?: Store };
 
 /** Await before reading: marks the render as request-time (cacheComponents is on). */
 export async function db(): Promise<Store> {
   await connection();
-  return (g.__commonsMock4 ??= seed());
+  return (g.__commonsMock7 ??= seed());
 }
 
 export const id = (p: string) => `${p}${Math.random().toString(36).slice(2, 8)}`;
@@ -122,12 +122,12 @@ export const SETUP_PROMPT = `Use the "commons" MCP connector and work through ou
 /** Sent by the MCP server as its `instructions` when Claude connects (F5), never pasted anywhere. */
 export const MCP_INSTRUCTIONS = [
   `This server hands out team tasks. To work on them:`,
-  `1. Call list_work. It returns the items you may take and this run's budget.`,
-  `2. Take items in the order given. Call claim; if it is taken, move to the next one.`,
-  `3. Call get_task for the claimed item and follow the instructions it returns exactly.`,
+  `1. Call next_task. It claims the next free item for you and returns its instructions. If it returns nothing, stop.`,
+  `2. (To pick a specific item instead: call list_work, then claim it. If claim says taken or done, choose another.)`,
+  `3. Follow the instructions you got exactly. Never work on an item you have not claimed.`,
   `4. On long items, call heartbeat at least every 30 minutes.`,
   `5. Finish each item with complete (a short summary, and details: what you did, where the result is, anything a human should know), fail (reason), or skip (reason).`,
-  `6. Stop when list_work is empty or the budget is used up.`,
+  `6. Repeat from step 1 until next_task returns nothing.`,
 ].join("\n");
 
 /** Creates missing task items: one per list line, or one "" item for a task without a list. */
@@ -147,9 +147,12 @@ export function activeClaim(s: Store, itemId: string) {
   return s.claims.find((c) => c.$id === itemId && new Date(c.leaseUntil).getTime() > Date.now()) ?? null;
 }
 
-/** Display name for a member id or "team" (a Claude schedule). */
-export function who(s: Store, by: string) {
-  if (by === "team") return "⏱ Claude schedule";
+/** Assignment rule: no assignees = anyone; otherwise only those listed (their schedules included). */
+export const canTake = (task: Task, by: string) => task.assignees.length === 0 || task.assignees.includes(by);
+
+/** Display name for a member id; adds "scheduled" for runs from that person's Claude schedule. */
+export function who(s: Store, by: string, scheduled = false): string {
+  if (scheduled) return `${who(s, by)} · ⏱ scheduled`;
   return s.members.find((m) => m.$id === by)?.name ?? by;
 }
 

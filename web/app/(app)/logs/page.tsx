@@ -46,7 +46,7 @@ export default async function LogsPage({ searchParams }: PageProps<"/logs">) {
             <details key={l.$id} className="group min-w-[680px] border-b border-line last:border-0">
               <summary className="grid cursor-pointer list-none grid-cols-[110px_140px_1fr_80px_70px] items-start gap-3 px-3 py-2.5 text-sm hover:bg-hover">
                 <span className="text-xs text-muted">{fmt(l.finishedAt)}</span>
-                <span>{who(s, l.by)}</span>
+                <span>{who(s, l.by, l.scheduled)}</span>
                 <span className="min-w-0">
                   <span className="font-medium">{task?.title}</span>
                   {item && <span className="text-muted"> · {item}</span>}

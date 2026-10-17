@@ -33,18 +33,16 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
   );
 }
 
-export function TokenForm({ allowTeam, appUrl }: { allowTeam?: boolean; appUrl: string }) {
+export function TokenForm({ appUrl }: { appUrl: string }) {
   const [state, action, pending] = useActionState(createToken, null);
   const cmd = state && `claude mcp add --transport http commons ${appUrl}/api/mcp --header "Authorization: Bearer ${state.token}"`;
   return (
     <div className="space-y-3">
       <form action={action} className="flex flex-wrap gap-2 sm:flex-nowrap">
-        {allowTeam && (
-          <select name="owner" className={`${input} sm:w-auto`}>
-            <option value="team">For a Claude schedule (team)</option>
-            <option value="me">For my own Claude Code</option>
-          </select>
-        )}
+        <select name="kind" className={`${input} sm:w-auto`}>
+          <option value="schedule">For my Claude schedule</option>
+          <option value="manual">For my own Claude Code sessions</option>
+        </select>
         <input name="name" placeholder="Token name (e.g. laptop)" className={input} required />
         <button className={btnPrimary} disabled={pending}>Create token</button>
       </form>

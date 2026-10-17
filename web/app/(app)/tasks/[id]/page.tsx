@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireMember } from "@/lib/auth";
 import { activeClaim, buildPrompt, db, who } from "@/lib/mock";
-import { approveVersion, saveTask, suggestChange } from "@/app/actions";
+import { saveTask, suggestChange } from "@/app/actions";
 import { Badge, Card, LeadOnly, PageHeader, btn, btnPrimary, fmt, input, label, type Tone } from "@/components/ui";
 
 const tone: Record<string, Tone> = { available: "gray", done: "green", failed: "red", skipped: "amber" };
@@ -26,10 +26,7 @@ export default async function TaskPage({ params, searchParams }: PageProps<"/tas
   return (
     <>
       <PageHeader title={task?.title ?? "New task"} sub={task?.description}>
-        {task && <div className="flex gap-2">
-          <Badge>current v{task.currentVersion}</Badge>
-          {task.approvedVersion ? <Badge tone="green">approved v{task.approvedVersion}</Badge> : <Badge tone="red">not approved</Badge>}
-        </div>}
+        {task && <Badge>prompt v{task.currentVersion}</Badge>}
       </PageHeader>
 
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
@@ -55,6 +52,17 @@ export default async function TaskPage({ params, searchParams }: PageProps<"/tas
                   </div>
                   <div><label className={label}>Routine: redo after (days)</label><input name="redoDays" type="number" min={1} defaultValue={task?.redoDays || 7} className={input} /></div>
                   <div><label className={label}>Priority (higher first)</label><input name="priority" type="number" defaultValue={task?.priority ?? 0} className={input} /></div>
+                </div>
+
+                <div>
+                  <label className={label}>Assigned to (only they can take it, by hand or from their Claude schedule; none ticked = anyone)</label>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-md border border-line p-3 text-sm">
+                    {s.members.map((m) => ({ id: m.$id, name: m.name })).map((a) => (
+                      <label key={a.id} className="flex items-center gap-1.5">
+                        <input type="checkbox" name="assignees" value={a.id} defaultChecked={task?.assignees.includes(a.id)} /> {a.name}
+                      </label>
+                    ))}
+                  </div>
                 </div>
 
                 <div>
@@ -103,7 +111,7 @@ export default async function TaskPage({ params, searchParams }: PageProps<"/tas
                   return (
                     <li key={i.$id} className="flex items-center justify-between gap-2 py-1.5">
                       <span className="truncate">{i.item || task.title}</span>
-                      <Badge tone={c ? "blue" : tone[i.status]}>{c ? `${who(s, c.by)} on it` : i.status}</Badge>
+                      <Badge tone={c ? "blue" : tone[i.status]}>{c ? `${who(s, c.by, c.scheduled)} on it` : i.status}</Badge>
                     </li>
                   );
                 })}
@@ -116,7 +124,7 @@ export default async function TaskPage({ params, searchParams }: PageProps<"/tas
                   {logs.map((l) => (
                     <li key={l.$id} className="py-2">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-muted">{who(s, l.by)} · {fmt(l.finishedAt)}</span>
+                        <span className="text-xs text-muted">{who(s, l.by, l.scheduled)} · {fmt(l.finishedAt)}</span>
                         <Badge tone={tone[l.outcome]}>{l.outcome}</Badge>
                       </div>
                       <p className="text-xs">{s.taskItems.find((i) => i.$id === l.taskItemId)?.item} {l.summary}</p>
@@ -126,19 +134,11 @@ export default async function TaskPage({ params, searchParams }: PageProps<"/tas
               ) : <p className="text-sm text-muted">Nothing done yet.</p>}
             </Card>
 
-            <Card title="Versions">
+            <Card title="Prompt history">
               <ul className="-my-2 divide-y divide-line">
                 {versions.map((v) => (
                   <li key={v.$id} className="py-2.5 text-sm">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium">v{v.version} {task.approvedVersion === v.version && <Badge tone="green">approved</Badge>}</span>
-                      {lead && task.approvedVersion !== v.version && (
-                        <form action={approveVersion}>
-                          <input type="hidden" name="id" value={task.$id} /><input type="hidden" name="version" value={v.version} />
-                          <button className={btn}>Approve</button>
-                        </form>
-                      )}
-                    </div>
+                    <span className="font-medium">v{v.version} {v.version === task.currentVersion && <Badge tone="green">in use</Badge>}</span>
                     <p className="text-xs text-muted">{who(s, v.authorId)} · {fmt(v.createdAt)}</p>
                     <details className="mt-1"><summary className="cursor-pointer text-xs text-accent">prompt</summary>
                       <pre className="mt-1 whitespace-pre-wrap rounded bg-hover p-2 font-mono text-xs">{v.prompt}</pre>

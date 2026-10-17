@@ -13,18 +13,13 @@ export default async function SettingsPage() {
     <>
       <PageHeader title="Settings" />
       <div className="space-y-6">
-        <Card title="Team policy and run budget" actions={!lead && <LeadOnly />}>
+        <Card title="Team policy" actions={!lead && <LeadOnly />}>
           <form action={saveSettings} className="space-y-3">
             <fieldset disabled={!lead} className="space-y-3">
               <div>
                 <label className={label}>Team policy: rules placed before every task prompt (e.g. how to deliver results, what never to touch).</label>
                 <textarea name="policy" rows={5} defaultValue={s.settings.policy} className={`${input} font-mono`} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className={label}>Max tasks per Claude run</label><input name="maxItemsPerRun" type="number" min={1} defaultValue={s.settings.maxItemsPerRun} className={input} /></div>
-                <div><label className={label}>Max minutes per Claude run</label><input name="maxMinutesPerRun" type="number" min={5} defaultValue={s.settings.maxMinutesPerRun} className={input} /></div>
-              </div>
-              <p className="text-xs text-muted">The budget stops one scheduled run from using up the team&apos;s Claude limit.</p>
               {lead && <button className={btnPrimary}>Save</button>}
             </fieldset>
           </form>
@@ -35,7 +30,7 @@ export default async function SettingsPage() {
           <ul className="divide-y divide-line text-sm">
             {tokens.map((t) => (
               <li key={t.$id} className="flex items-center justify-between gap-2 py-2">
-                <span>{t.name} <span className="text-xs text-muted">· {who(s, t.owner)} · last used {fmt(t.lastUsedAt)}</span></span>
+                <span>{t.name} <span className="text-xs text-muted">· {who(s, t.owner, t.scheduled)} · last used {fmt(t.lastUsedAt)}</span></span>
                 {t.revoked ? <Badge tone="red">revoked</Badge> : (
                   <form action={revokeToken}><input type="hidden" name="id" value={t.$id} /><button className={btn}>Revoke</button></form>
                 )}

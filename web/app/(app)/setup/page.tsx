@@ -16,10 +16,11 @@ export default async function SetupPage() {
         <li>
           <Card title="1 · Create a token">
             <p className="mb-3 text-sm text-muted">
-              The token tells our server which team you are. A <b>team</b> token is for Claude schedules (its work is logged as &quot;Claude schedule&quot;);
-              a personal one is for your own Claude Code. It is shown once.
+              The token says who you are, so the work is logged under your name and uses your own Claude limit.
+              Pick <b>schedule</b> for a Claude scheduled task (its work is logged as &quot;{me.name} · scheduled&quot;)
+              or <b>own sessions</b> for working in Claude Code yourself. It is shown once.
             </p>
-            <TokenForm allowTeam={me.role === "lead"} appUrl={APP_URL} />
+            <TokenForm appUrl={APP_URL} />
           </Card>
         </li>
 

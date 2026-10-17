@@ -5,11 +5,10 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "node:crypto";
 import { requireLead, requireMember } from "@/lib/auth";
-import { db, ensureItems, id, logAudit, now, parseItems, TEAM } from "@/lib/mock";
+import { canTake, db, ensureItems, id, logAudit, now, parseItems, TEAM } from "@/lib/mock";
 import type { Outcome, Role, TaskMode } from "@/lib/types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
-const list = (v: string) => v.split(",").map((x) => x.trim()).filter(Boolean);
 const done = () => revalidatePath("/", "layout");
 
 // --- Auth (F1) ---
@@ -27,10 +26,13 @@ export async function claimItem(f: FormData) {
   const me = await requireMember();
   const s = await db();
   const iid = str(f, "id");
+  const item = s.taskItems.find((x) => x.$id === iid);
+  const task = s.tasks.find((k) => k.$id === item?.taskId);
+  if (!item || !task || !canTake(task, me.$id)) return; // not-found / not-assigned
   const c = s.claims.find((x) => x.$id === iid);
   if (c && new Date(c.leaseUntil) > new Date()) return; // taken
   s.claims = s.claims.filter((x) => x.$id !== iid);
-  s.claims.push({ $id: iid, by: me.$id, claimedAt: now(), leaseUntil: new Date(Date.now() + 120 * 60_000).toISOString() });
+  s.claims.push({ $id: iid, by: me.$id, scheduled: false, claimedAt: now(), leaseUntil: new Date(Date.now() + 120 * 60_000).toISOString() });
   done();
 }
 export async function finishItem(f: FormData) {
@@ -43,7 +45,7 @@ export async function finishItem(f: FormData) {
   if (!item || (outcome !== "skipped" && c?.by !== me.$id)) return;
   const task = s.tasks.find((k) => k.$id === item.taskId)!;
   const log = {
-    $id: id("l"), taskItemId: iid, taskId: task.$id, by: me.$id, outcome,
+    $id: id("l"), taskItemId: iid, taskId: task.$id, by: me.$id, scheduled: false, outcome,
     summary: { done: "Done (mock run).", failed: "Failed (mock run).", skipped: "Skipped by hand." }[outcome],
     details: outcome === "done" ? "Mock run: in the real flow Claude sends what it did and where the result is via complete." : null,
     version: task.currentVersion, startedAt: c?.claimedAt ?? now(), finishedAt: now(),
@@ -76,14 +78,14 @@ export async function saveTask(f: FormData) {
   const s = await db();
   let task = s.tasks.find((k) => k.$id === str(f, "id"));
   if (!task) {
-    task = { $id: id("k"), teamId: TEAM, title: "", description: "", mode: "once", redoDays: 0, items: [], priority: 0, currentVersion: 0, approvedVersion: null };
+    task = { $id: id("k"), teamId: TEAM, title: "", description: "", mode: "once", redoDays: 0, items: [], assignees: [], priority: 0, currentVersion: 0 };
     s.tasks.push(task);
   }
   const mode = str(f, "mode") as TaskMode;
   Object.assign(task, {
     title: str(f, "title"), description: str(f, "description"), mode,
     redoDays: mode === "routine" ? Math.max(1, Number(str(f, "redoDays")) || 7) : 0,
-    items: parseItems(str(f, "items")), priority: Number(str(f, "priority")) || 0,
+    items: parseItems(str(f, "items")), assignees: f.getAll("assignees").map(String), priority: Number(str(f, "priority")) || 0,
   });
   const prompt = str(f, "prompt");
   const cur = s.taskVersions.find((v) => v.taskId === task.$id && v.version === task.currentVersion);
@@ -96,14 +98,6 @@ export async function saveTask(f: FormData) {
   done();
   redirect(`/tasks/${task.$id}`);
 }
-export async function approveVersion(f: FormData) {
-  const lead = await requireLead();
-  const task = (await db()).tasks.find((k) => k.$id === str(f, "id"))!;
-  const before = task.approvedVersion;
-  task.approvedVersion = Number(str(f, "version"));
-  await logAudit(lead.$id, "task.approve", task.$id, before, task.approvedVersion);
-  done();
-}
 export async function suggestChange(f: FormData) {
   const me = await requireMember();
   await logAudit(me.$id, "task.suggest", str(f, "id"), undefined, str(f, "note"));
@@ -113,7 +107,7 @@ export async function suggestChange(f: FormData) {
 export async function quickTask(f: FormData) {
   const lead = await requireLead();
   const s = await db();
-  const t = { $id: id("k"), teamId: TEAM, title: str(f, "title"), description: "", mode: "once" as const, redoDays: 0, items: [], priority: 0, currentVersion: 1, approvedVersion: null };
+  const t = { $id: id("k"), teamId: TEAM, title: str(f, "title"), description: "", mode: "once" as const, redoDays: 0, items: [], assignees: [], priority: 0, currentVersion: 1 };
   s.tasks.push(t);
   s.taskVersions.push({ $id: id("v"), taskId: t.$id, version: 1, prompt: str(f, "prompt"), authorId: lead.$id, createdAt: now() });
   await ensureItems(t.$id, []);
@@ -121,12 +115,12 @@ export async function quickTask(f: FormData) {
   done();
 }
 
-// --- Settings: policy + budget (F3), members (F1), tokens (F5) ---
+// --- Settings: policy (F3), members (F1), tokens (F5) ---
 export async function saveSettings(f: FormData) {
   const lead = await requireLead();
   const st = (await db()).settings;
   const before = { ...st };
-  Object.assign(st, { policy: str(f, "policy"), maxItemsPerRun: Number(str(f, "maxItemsPerRun")), maxMinutesPerRun: Number(str(f, "maxMinutesPerRun")) });
+  st.policy = str(f, "policy");
   await logAudit(lead.$id, "settings.edit", st.$id, before, st);
   done();
 }
@@ -155,11 +149,10 @@ export async function removeMember(f: FormData) {
 /** Returns the raw token once; only a hash would be stored for real (F5). */
 export async function createToken(_: unknown, f: FormData): Promise<{ token: string } | null> {
   const me = await requireMember();
-  const owner = str(f, "owner") === "team" ? "team" : me.$id;
-  if (owner === "team") await requireLead(); // schedule tokens are lead-only
+  const scheduled = str(f, "kind") === "schedule";
   const token = `cc_${randomBytes(32).toString("base64url")}`;
-  (await db()).apiTokens.push({ $id: id("t"), owner, name: str(f, "name") || "token", tokenHash: "mock", lastUsedAt: null, revoked: false });
-  await logAudit(me.$id, "token.create", owner);
+  (await db()).apiTokens.push({ $id: id("t"), owner: me.$id, scheduled, name: str(f, "name") || "token", tokenHash: "mock", lastUsedAt: null, revoked: false });
+  await logAudit(me.$id, "token.create", scheduled ? "schedule" : "personal");
   done();
   return { token };
 }
