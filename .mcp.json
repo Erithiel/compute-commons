@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "compute-commons": {
+      "command": "node",
+      "args": ["mcp/index.mjs"],
+      "env": { "CLAN": "clan.yml" }
+    }
+  }
+}

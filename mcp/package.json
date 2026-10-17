@@ -1,0 +1,11 @@
+{
+  "name": "compute-commons-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "compute-commons-mcp": "index.mjs" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^3.25.0"
+  }
+}

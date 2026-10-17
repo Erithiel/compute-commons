@@ -1,0 +1,18 @@
+# Sample clan. Keep it flat: `key: [a, b]` lists only (adopt.ps1 parses it with a regex, no YAML library).
+name: example-clan
+description: Spare AI capacity for open-source software that serves the public.
+
+# GitHub logins
+heads: [clan-head-login]
+reviewers: [reviewer-login]
+members: [member-login]
+
+# Whose `ai-friendly` issues this clan trusts (project maintainers).
+trusted_task_authors: [maintainer-login]
+
+# Repos (owner/name) the clan supports. Public, open-licensed only.
+projects: [owner/example-project]
+
+# Subset of projects the clan has reviewed enough that members may run tests locally.
+# Others: read/edit only, CI runs the tests after review.
+local_run: [owner/example-project]
