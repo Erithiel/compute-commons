@@ -29,17 +29,6 @@ export async function sessionAccount(): Promise<Account | null> {
   return secret ? new Account(base().setSession(secret)) : null;
 }
 
-/** Checks the endpoint + project are reachable. Needs no API key. */
-export async function ping(): Promise<boolean> {
-  try {
-    // Typed as string, but 22.1.3 actually returns { message: "Pong!" }.
-    const r: unknown = await base().ping();
-    return JSON.stringify(r).includes("Pong!");
-  } catch {
-    return false;
-  }
-}
-
 export const isCode = (e: unknown, code: number) => e instanceof AppwriteException && e.code === code;
 
 /** Every row matching the queries, paged by cursor (Appwrite returns 25 by default). */

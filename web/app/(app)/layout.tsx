@@ -1,7 +1,7 @@
 import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getMember, getUser } from "@/lib/auth";
-import { ping, rowOrNull, T } from "@/lib/appwrite";
+import { rowOrNull, T } from "@/lib/appwrite";
 import type { Team } from "@/lib/types";
 import { logout } from "@/app/(auth)/actions";
 import { Nav } from "@/components/client";
@@ -13,16 +13,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <Shell>{children}</Shell>
     </Suspense>
   );
-}
-
-const Dot = ({ ok }: { ok: boolean | null }) => (
-  <span className={`inline-block size-1.5 rounded-full ${ok === null ? "bg-muted/50" : ok ? "bg-green-500" : "bg-red-500"}`} />
-);
-
-// Pings Appwrite on every app load to verify endpoint + project.
-async function AppwriteStatus() {
-  const ok = await ping();
-  return <span className="inline-flex items-center gap-1.5"><Dot ok={ok} />Appwrite {ok ? "connected" : "unreachable"}</span>;
 }
 
 // Grid: on md the sidebar is column 1 (nav on top, account at the bottom); on mobile the account block falls below the page.
@@ -38,9 +28,7 @@ async function Shell({ children }: { children: ReactNode }) {
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 md:block md:space-y-2">
           <p className="flex items-center gap-2 font-semibold tracking-tight"><Mark />Compute Commons</p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted md:flex-col md:items-start md:pl-7">
-            <span className="inline-flex items-center gap-1.5">{team?.name}</span>
-            <Suspense fallback={<span className="inline-flex items-center gap-1.5"><Dot ok={null} />Appwrite checking…</span>}><AppwriteStatus /></Suspense>
-          </div>
+            <span className="inline-flex items-center gap-1.5">{team?.name}</span>          </div>
         </div>
         <Nav />
       </aside>
