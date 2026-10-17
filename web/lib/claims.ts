@@ -3,7 +3,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { ID, Query } from "node-appwrite";
-import { adminTables, allRows, DB_ID, isCode, rowOrNull, T } from "./appwrite";
+import { adminTables, allRows, DB_ID, isCode, rowOrNull, T, teamRow } from "./appwrite";
 import type { Caller, Claim, Log, Task, TaskItem } from "./types";
 
 const DAY = 86_400_000;
@@ -138,6 +138,7 @@ export async function finish(itemId: string, caller: Caller, outcome: "done" | "
 
 /** Skip with a reason. No claim needed, but someone else's active claim blocks it. */
 export async function recordSkip(itemId: string, caller: Caller, reason: string): Promise<Log> {
+  if (!(await teamRow<TaskItem>(T.taskItems, itemId, caller.teamId))) throw new Error("not-found"); // before the claim: no "taken" leak across teams
   const held = await rowOrNull<Claim>(T.claims, itemId);
   if (isActive(held, new Date()) && held!.by !== caller.memberId) throw new Error("taken");
   return writeLog(itemId, caller, "skipped", reason, null, held?.by === caller.memberId ? held : null);
