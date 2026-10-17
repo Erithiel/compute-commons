@@ -21,9 +21,13 @@ export const isActive = (claim: Claim | null, now: Date) => !!claim && new Date(
 export function isEligible(item: TaskItem, task: Task, claim: Claim | null, now: Date) {
   if (isActive(claim, now)) return false;
   if (item.status !== "done") return true;
-  if (!task.repeatDays || !item.lastDoneAt) return false;
+  if (!task.repeatDays || !item.lastDoneAt || repeatEnded(task, now)) return false;
   return now.getTime() - new Date(item.lastDoneAt).getTime() >= task.repeatDays * DAY;
 }
+
+/** "Every N days for a month": the repeat stops repeatFor days after the task was created (0 = never stops). */
+export const repeatEnded = (task: Task, now: Date) =>
+  !!task.repeatFor && !!task.$createdAt && now.getTime() >= new Date(task.$createdAt).getTime() + task.repeatFor * DAY;
 
 /** Never-done first, then oldest done; ties keep the given order (task order, then row position). */
 export const sortWork = (items: TaskItem[]) =>

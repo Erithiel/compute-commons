@@ -31,13 +31,18 @@ export async function signOut() {
 /** Create or edit a task: title, prompt, repeat, assignees, optional rows. A changed prompt is a new version. */
 export async function saveTask(f: FormData) {
   const lead = await requireLead();
+  const every = str(f, "repeat") === "every";
   const { task, created, newVersion } = await saveTaskRow(str(f, "id") || null, {
     title: str(f, "title"),
     prompt: String(f.get("prompt") ?? ""),
-    repeatDays: str(f, "repeat") === "every" ? Math.max(1, Number(str(f, "repeatDays")) || 7) : 0,
+    repeatDays: every ? Math.max(1, Number(str(f, "repeatDays")) || 1) : 0,
+    // "for a [1] [month]": the repeat stops that many days after creation. ponytail: a month is 30 days.
+    repeatFor: every ? Math.max(0, Number(str(f, "repeatFor")) || 0) * (Number(str(f, "repeatForUnit")) || 1) : 0,
     assignees: f.getAll("assignees").map(String),
-    rows: f.getAll("items").map(String),
+    columns: f.getAll("columns").map(String),
+    rows: f.getAll("items").map((v) => { try { return (JSON.parse(String(v)) as unknown[]).map(String); } catch { return [String(v)]; } }),
   }, lead.$id);
+  if (created && str(f, "myNote")) await saveNote(task.$id, lead.$id, String(f.get("myNote")));
   await audit(lead.$id, created ? "task.create" : "task.edit", task.$id, undefined, { title: task.title, version: task.currentVersion, newVersion });
   done();
   redirect(`/tasks/${task.$id}`);
@@ -56,7 +61,7 @@ export async function suggestChange(f: FormData) {
 /** Board quick-add: a once / anyone task with just a title and a prompt. */
 export async function quickTask(f: FormData) {
   const lead = await requireLead();
-  const { task } = await saveTaskRow(null, { title: str(f, "title"), prompt: String(f.get("prompt") ?? ""), repeatDays: 0, assignees: [], rows: [] }, lead.$id);
+  const { task } = await saveTaskRow(null, { title: str(f, "title"), prompt: String(f.get("prompt") ?? ""), repeatDays: 0, repeatFor: 0, assignees: [], columns: [], rows: [] }, lead.$id);
   await audit(lead.$id, "task.create", task.$id, undefined, { title: task.title });
   done();
 }

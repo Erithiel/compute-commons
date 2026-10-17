@@ -59,7 +59,7 @@ export function who(s: Store, by: string, scheduled = false): string {
   return s.members.find((m) => m.$id === by)?.name ?? by;
 }
 
-export const repeatLabel = (t: Task) => (t.repeatDays ? `every ${t.repeatDays}d` : "once");
+export const repeatLabel = (t: Task) => (t.repeatDays ? `every ${t.repeatDays}d${t.repeatFor ? ` for ${t.repeatFor}d` : ""}` : "once");
 
 /** Read-only state of an item for the UI: who is on it, or its last status. */
 export function itemState(s: Store, item: TaskItem) {

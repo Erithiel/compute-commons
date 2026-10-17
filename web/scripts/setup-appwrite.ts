@@ -29,6 +29,8 @@ export const SCHEMA: Record<string, { name: string; columns: Col[]; indexes: Idx
     name: "Tasks",
     columns: [id("teamId"), { key: "title", type: "varchar", size: 256, required: true },
       { key: "repeatDays", type: "integer", required: false, default: 0 },
+      { key: "repeatFor", type: "integer", required: false, default: 0 },
+      { key: "columns", type: "varchar", size: 64, array: true },
       { key: "assignees", type: "varchar", size: ID, array: true },
       { key: "currentVersion", type: "integer", required: false, default: 0 }],
     indexes: [{ key: "team", type: "key", columns: ["teamId"] }],
@@ -47,6 +49,7 @@ export const SCHEMA: Record<string, { name: string; columns: Col[]; indexes: Idx
   [T.taskItems]: {
     name: "Task items",
     columns: [id("teamId"), id("taskId"), { key: "text", type: "varchar", size: 1024, required: false },
+      { key: "data", type: "text", required: false },
       { key: "position", type: "integer", required: true },
       { key: "status", type: "enum", elements: ["available", "done", "failed", "skipped"], required: true },
       at("lastDoneAt", false), id("lastLogId", false)],

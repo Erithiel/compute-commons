@@ -11,6 +11,9 @@ export interface Member { $id: string; teamId: string; userId: string; name: str
 export interface Task {
   $id: string; teamId: string; title: string;
   repeatDays: number;                    // 0 = once; N = each item comes back N days after it was last done
+  repeatFor: number;                     // days the repeat runs for, counted from the task's creation; 0 = forever
+  columns: string[];                     // row column names, e.g. ["Client", "Site"]; [] = rows have one unnamed value
+  $createdAt?: string;
   assignees: string[];                   // member ids; [] = anyone
   currentVersion: number;                // the prompt lives in task_versions; every run uses the latest
 }
@@ -21,7 +24,8 @@ export interface MemberNote { $id: string; taskId: string; memberId: string; tex
 
 /** The unit that is claimed and done. A task without rows has one hidden item with text "". */
 export interface TaskItem {
-  $id: string; teamId: string; taskId: string; text: string; position: number;
+  $id: string; teamId: string; taskId: string; text: string /* display/identity: the values joined with " · " */; position: number;
+  data?: string | null;                  // JSON {column: value} for the row's columns
   status: ItemStatus; lastDoneAt: string | null; lastLogId: string | null;
 }
 export interface Claim { $id: string /* = taskItemId */; by: string /* memberId */; scheduled: boolean; claimedAt: string; leaseUntil: string }
