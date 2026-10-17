@@ -29,8 +29,11 @@ export const LOGIN_MAX_FAILS = 5;
 export const LOGIN_WINDOW_MS = 15 * 60_000;
 /** Row id for login_attempts: Appwrite ids are at most 36 chars. */
 export const emailKey = (email: string) => sha256(email.trim().toLowerCase()).slice(0, 36);
-export const loginLocked = (a: { fails: number; windowStart: string } | null, now: Date) =>
-  !!a && a.fails >= LOGIN_MAX_FAILS && now.getTime() - new Date(a.windowStart).getTime() < LOGIN_WINDOW_MS;
+/** Fixed 15-minute windows. Each email gets slots 1..5 per window; the slot's row id is deterministic, so a new window needs no reset. */
+export const loginWindow = (now: Date) => Math.floor(now.getTime() / LOGIN_WINDOW_MS);
+export const attemptKey = (email: string, now: Date, slot: number) => sha256(`${emailKey(email)}:${loginWindow(now)}:${slot}`).slice(0, 36);
+/** Whole minutes until the current window ends (when a locked email unlocks). */
+export const minutesLeft = (now: Date) => Math.ceil((LOGIN_WINDOW_MS - (now.getTime() % LOGIN_WINDOW_MS)) / 60_000);
 
 /** Only same-site paths: blocks open redirects through ?next=. */
 export const safeNext = (next: string | null | undefined, fallback: string) =>

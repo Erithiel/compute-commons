@@ -1,16 +1,16 @@
 // Accounts are Appwrite users. Our server creates the session with the API key and keeps its secret in an
 // httpOnly cookie; every later request acts as that user. API-key calls skip Appwrite's rate limits,
-// so failed logins are counted here (login_attempts).
+// so login attempts are counted in lib/throttle.ts (login_attempts).
 import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { ID, Query, type Models } from "node-appwrite";
-import { adminAccount, adminTables, adminUsers, allRows, DB_ID, isCode, rowOrNull, sessionAccount, T } from "./appwrite";
-import { emailKey, LOGIN_WINDOW_MS, loginLocked } from "./team-rules";
+import { adminAccount, adminUsers, allRows, isCode, sessionAccount, T } from "./appwrite";
+import { minutesLeft } from "./team-rules";
+import { clearAttempts, registerAttempt } from "./throttle";
 import type { Member } from "./types";
 
 const COOKIE = process.env.SESSION_COOKIE_NAME ?? "commons_session";
-type Attempt = { $id: string; fails: number; windowStart: string };
 
 /** Creates the account and signs in. Returns an error message, or null. */
 export async function signUp(name: string, email: string, password: string): Promise<string | null> {
@@ -26,24 +26,21 @@ export async function signUp(name: string, email: string, password: string): Pro
 
 /** Returns an error message, or null when the session cookie is set. */
 export async function signIn(email: string, password: string): Promise<string | null> {
-  const key = emailKey(email);
-  const attempt = await rowOrNull<Attempt>(T.loginAttempts, key);
   const now = new Date();
-  if (loginLocked(attempt, now)) return "Too many failed attempts. Try again in 15 minutes.";
+  if (!(await registerAttempt(email, now))) {
+    const m = minutesLeft(now);
+    return `Too many failed attempts. Try again in ${m} minute${m === 1 ? "" : "s"}.`;
+  }
   try {
     const s = await adminAccount().createEmailPasswordSession(email.trim(), password);
     (await cookies()).set(COOKIE, s.secret, {
       httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", expires: new Date(s.expire),
     });
   } catch (e) {
-    if (isCode(e, 400)) return "Wrong email or password."; // malformed email / empty password: not a failed attempt
-    if (!isCode(e, 401)) throw e;
-    const fresh = !attempt || now.getTime() - new Date(attempt.windowStart).getTime() >= LOGIN_WINDOW_MS;
-    await adminTables().upsertRow(DB_ID, T.loginAttempts, key,
-      fresh ? { fails: 1, windowStart: now.toISOString() } : { fails: attempt!.fails + 1, windowStart: attempt!.windowStart });
-    return "Wrong email or password.";
+    if (isCode(e, 400) || isCode(e, 401)) return "Wrong email or password."; // 400: malformed email / empty password
+    throw e;
   }
-  if (attempt) await adminTables().deleteRow(DB_ID, T.loginAttempts, key).catch(() => {});
+  await clearAttempts(email, now).catch(() => {});
   return null;
 }
 

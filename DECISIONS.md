@@ -38,7 +38,7 @@ Short record of what the team has decided, parked or assigned. Newest at the bot
 | D25 | Takeover marker instead of a transaction | Taking over an expired claim is locked by creating a `claim_takeovers` row with a derived id (the same "create with a fixed id" trick as the claim itself). On our 1.8.1 server, delete + create in one transaction let two claimers win in a race test, so transactions are only used for all-or-nothing writes, never as a lock. |
 | D26 | Sign up, then create or join a team; one team per account | Anyone can sign up with email and password. A new account either creates a team (and is its lead) or joins one through an invite link. One team per account for now (unique `members.userId`); a team switcher is later. Every table row carries `teamId`, so teams never see each other. |
 | D27 | Invite links instead of email | There is no SMTP on api.rando.ge yet, so a lead creates a one-time link (7 days, role chosen, hash stored) and sends it by hand. Email invites, verification and password reset wait for SMTP. |
-| D28 | Our own login throttle | Our server logs in with the API key, and API-key calls skip Appwrite's rate limits. So failed logins are counted in `login_attempts`: 5 failures per 15 minutes per email locks that email. |
+| D28 | Our own login throttle | Our server logs in with the API key, and API-key calls skip Appwrite's rate limits. So login attempts are counted in `login_attempts`, before the password is checked: 5 attempts per email per fixed 15-minute window, then that email is locked until the window ends. The count is per email, so anyone can lock out a known email for the rest of the window, and trying one password across many emails is not throttled. |
 
 ## Consequences of D4 (to design)
 

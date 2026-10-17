@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { emailKey, hashCode, inviteProblem, leadProblem, loginLocked, newInviteCode, safeNext } from "../team-rules";
+import { attemptKey, emailKey, hashCode, inviteProblem, leadProblem, minutesLeft, newInviteCode, safeNext } from "../team-rules";
 import type { Invite, Member } from "../types";
 
 const now = new Date("2026-10-20T12:00:00Z");
@@ -47,11 +47,15 @@ describe("login throttle", () => {
     expect(emailKey(" Nino@Rando.ge ")).toBe(emailKey("nino@rando.ge"));
     expect(emailKey("x@y.z")).toMatch(/^[0-9a-f]{36}$/);
   });
-  it("locks after 5 failures inside 15 minutes, then unlocks", () => {
-    expect(loginLocked(null, now)).toBe(false);
-    expect(loginLocked({ fails: 4, windowStart: "2026-10-20T11:50:00Z" }, now)).toBe(false);
-    expect(loginLocked({ fails: 5, windowStart: "2026-10-20T11:50:00Z" }, now)).toBe(true);
-    expect(loginLocked({ fails: 9, windowStart: "2026-10-20T11:40:00Z" }, now)).toBe(false);
+  it("attemptKey is per email, 15-minute window and slot", () => {
+    const at = (t: string) => new Date(`2026-10-20T${t}Z`);
+    expect(attemptKey(" X@Y.z", at("12:00:00"), 1)).toBe(attemptKey("x@y.z", at("12:14:59"), 1));
+    expect(attemptKey("x@y.z", at("12:14:59"), 1)).not.toBe(attemptKey("x@y.z", at("12:15:00"), 1));
+    expect(attemptKey("x@y.z", at("12:00:00"), 1)).not.toBe(attemptKey("x@y.z", at("12:00:00"), 2));
+    expect(attemptKey("x@y.z", at("12:00:00"), 1)).not.toBe(attemptKey("a@y.z", at("12:00:00"), 1));
+    expect(attemptKey("x@y.z", at("12:00:00"), 1)).toMatch(/^[0-9a-f]{36}$/);
+    expect(minutesLeft(at("12:00:00"))).toBe(15);
+    expect(minutesLeft(at("12:14:01"))).toBe(1);
   });
 });
 

@@ -99,7 +99,7 @@ export const SCHEMA: Record<string, { name: string; columns: Col[]; indexes: Idx
     indexes: [{ key: "code", type: "unique", columns: ["codeHash"] }, { key: "team", type: "key", columns: ["teamId"] }],
   },
   [T.loginAttempts]: {
-    name: "Login attempts", // row id = emailKey(email); see lib/team-rules.ts
+    name: "Login attempts", // row id = attemptKey(email, window, slot); see lib/throttle.ts
     columns: [{ key: "fails", type: "integer", required: false, default: 0 }, at("windowStart")],
     indexes: [],
   },

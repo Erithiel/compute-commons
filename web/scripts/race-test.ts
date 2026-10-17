@@ -3,7 +3,8 @@
 import assert from "node:assert/strict";
 import { ID, Query } from "node-appwrite";
 import { adminTables, DB_ID, T } from "../lib/appwrite";
-import { claim, claimNext, finish } from "../lib/claims";
+import { claim, claimNext, finish, recordSkip } from "../lib/claims";
+import { clearAttempts, registerAttempt } from "../lib/throttle";
 import type { Caller } from "../lib/types";
 
 const TEAM = "race-test";
@@ -17,6 +18,7 @@ const make = async (table: string, data: Record<string, unknown>) => {
 };
 const item = (taskId: string, text: string, position: number) =>
   make(T.taskItems, { teamId: TEAM, taskId, text, position, status: "available", lastDoneAt: null, lastLogId: null });
+const email = `race-${Math.random().toString(36).slice(2, 10)}@example.com`;
 const okCount = (rs: Array<{ ok: boolean }>) => rs.filter((r) => r.ok).length;
 
 async function main() {
@@ -44,11 +46,21 @@ async function main() {
   assert.equal(new Set(got).size, 3, "…and all different");
   assert.deepEqual(new Set(got), new Set(three));
   console.log("✓ 5 claimNext on 3 rows → 3 distinct, 2 null");
+
+  await assert.rejects(recordSkip(three[0], { ...bot(98), teamId: "race-other" }, "x"), /not-found/, "another team's claimed item is not-found, not taken");
+  console.log("✓ recordSkip on another team's claimed item → \"not-found\"");
+
+  const now = new Date();
+  const tries = await Promise.all(Array.from({ length: 10 }, () => registerAttempt(email, now)));
+  assert.equal(tries.filter(Boolean).length, 5, "10 parallel login attempts: exactly 5 may proceed");
+  console.log("✓ 10 parallel login attempts → 5 allowed, 5 refused");
+  await clearAttempts(email, now);
 }
 
 main()
   .catch((e) => { console.error(e); process.exitCode = 1; })
   .finally(async () => {
+    await clearAttempts(email).catch(() => {});
     const logs = await db.listRows(DB_ID, T.logs, [Query.equal("taskId", created[0]?.[1] ?? "-")]).catch(() => ({ rows: [] }));
     const all: Array<[string, string]> = [...created, ...logs.rows.map((r): [string, string] => [T.logs, r.$id]),
       ...created.filter(([t]) => t === T.taskItems).map(([, id]): [string, string] => [T.claims, id])];
