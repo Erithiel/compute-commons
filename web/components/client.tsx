@@ -122,7 +122,7 @@ export function ItemsTable({ initial, columns: initialColumns, editable }: { ini
 
 export function TokenForm({ appUrl }: { appUrl: string }) {
   const [state, action, pending] = useActionState(createToken, null);
-  const cmd = state && `claude mcp add --transport http commons ${appUrl}/api/mcp --header "Authorization: Bearer ${state.token}"`;
+  const cmd = state && `claude mcp add --scope user --transport http commons ${appUrl}/api/mcp --header "Authorization: Bearer ${state.token}"`;
   return (
     <div className="space-y-3">
       <form action={action} className="flex flex-wrap gap-2 sm:flex-nowrap">
