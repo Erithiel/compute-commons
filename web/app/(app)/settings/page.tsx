@@ -3,6 +3,7 @@ import { allRows, T } from "@/lib/appwrite";
 import { requireMember } from "@/lib/auth";
 import { db, who } from "@/lib/mock";
 import { cancelInvite, leaveTeam, removeMember, revokeToken, saveSettings, setRole } from "@/app/actions";
+import { ActionForm } from "@/components/auth-forms";
 import { InviteForm } from "@/components/client";
 import type { Invite } from "@/lib/types";
 import { Badge, Card, LeadOnly, PageHeader, btn, btnPrimary, control, fmt, input, label, link } from "@/components/ui";
@@ -65,14 +66,16 @@ export default async function SettingsPage() {
                 <span>{m.name}</span>
                 {lead && m.$id !== me.$id ? (
                   <div className="flex gap-2">
-                    <form action={setRole} className="flex gap-1">
-                      <input type="hidden" name="id" value={m.$id} />
-                      <select name="role" aria-label={`Role for ${m.name}`} defaultValue={m.role} className={`${control} py-1`}>
-                        <option>lead</option><option>member</option>
-                      </select>
-                      <button className={btn}>Set</button>
-                    </form>
-                    <form action={removeMember}><input type="hidden" name="id" value={m.$id} /><button className={btn}>Remove</button></form>
+                    <ActionForm action={setRole}>
+                      <div className="flex gap-1">
+                        <input type="hidden" name="id" value={m.$id} />
+                        <select name="role" aria-label={`Role for ${m.name}`} defaultValue={m.role} className={`${control} py-1`}>
+                          <option>lead</option><option>member</option>
+                        </select>
+                        <button className={btn}>Set</button>
+                      </div>
+                    </ActionForm>
+                    <ActionForm action={removeMember}><input type="hidden" name="id" value={m.$id} /><button className={btn}>Remove</button></ActionForm>
                   </div>
                 ) : <Badge tone={m.role === "lead" ? "amber" : "gray"}>{m.role}</Badge>}
               </li>
@@ -81,10 +84,12 @@ export default async function SettingsPage() {
         </Card>
 
         <Card title="Leave team">
-          <form action={leaveTeam} className="flex items-center gap-3">
-            <button className={btn}>Leave team</button>
-            <span className="text-xs text-muted">Your MCP tokens stop working.</span>
-          </form>
+          <ActionForm action={leaveTeam}>
+            <div className="flex items-center gap-3">
+              <button className={btn}>Leave team</button>
+              <span className="text-xs text-muted">Your MCP tokens stop working.</span>
+            </div>
+          </ActionForm>
         </Card>
 
         {lead && (

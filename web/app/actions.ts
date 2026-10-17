@@ -61,6 +61,7 @@ export async function saveSettings(f: FormData) {
 }
 export async function makeInvite(_: unknown, f: FormData): Promise<{ link: string } | { error: string } | null> {
   const lead = await requireLead();
+  if (!process.env.APP_URL) return { error: "APP_URL is not set on the server." };
   const { code } = await createInvite(lead, str(f, "role") === "lead" ? "lead" : "member");
   done();
   return { link: `${process.env.APP_URL}/join/${code}` }; // shown once, never stored
@@ -69,20 +70,23 @@ export async function cancelInvite(f: FormData) {
   await revokeInvite(await requireLead(), str(f, "id"));
   done();
 }
-export async function setRole(f: FormData) {
+type Refusal = { error: string } | null; // returned, not thrown: production builds hide thrown action messages
+export async function setRole(_: Refusal, f: FormData): Promise<Refusal> {
   const error = await changeRole(await requireLead(), str(f, "id"), role(f));
-  if (error) throw new Error(error);
+  if (error) return { error };
   done();
+  return null;
 }
-export async function removeMember(f: FormData) {
+export async function removeMember(_: Refusal, f: FormData): Promise<Refusal> {
   const error = await removeMemberRow(await requireLead(), str(f, "id"));
-  if (error) throw new Error(error);
+  if (error) return { error };
   done();
+  return null;
 }
-export async function leaveTeam() {
+export async function leaveTeam(): Promise<Refusal> {
   const me = await requireMember();
   const error = await removeMemberRow(me, me.$id);
-  if (error) throw new Error(error);
+  if (error) return { error };
   redirect("/welcome");
 }
 /** Returns the raw token once; only its hash is stored. The token always belongs to the caller. */
