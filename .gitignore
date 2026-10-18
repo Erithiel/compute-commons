@@ -3,3 +3,5 @@ node_modules/
 .env.*
 adopt-work/
 .playwright-mcp/
+
+.vercel

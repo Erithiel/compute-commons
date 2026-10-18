@@ -11,7 +11,7 @@ async function Form({ searchParams }: { searchParams: Promise<{ next?: string }>
       <div className="space-y-3">
         <Mark className="size-8" />
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Compute Commons</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Relay</h1>
           <p className="text-sm text-muted">Create your account.</p>
         </div>
       </div>

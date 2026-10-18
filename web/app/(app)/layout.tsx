@@ -26,7 +26,7 @@ async function Shell({ children }: { children: ReactNode }) {
     <div className="min-h-screen md:grid md:grid-cols-[15rem_minmax(0,1fr)] md:grid-rows-[1fr_auto]">
       <aside className="sticky top-0 z-10 space-y-3 border-b border-line bg-sidebar/90 px-4 pt-3 backdrop-blur md:static md:space-y-6 md:border-r md:border-b-0 md:bg-sidebar md:p-4 md:pt-5">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 md:block md:space-y-2">
-          <p className="flex items-center gap-2 font-semibold tracking-tight"><Mark />Compute Commons</p>
+          <p className="flex items-center gap-2 font-semibold tracking-tight"><Mark />Relay</p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted md:flex-col md:items-start md:pl-7">
             <span className="inline-flex items-center gap-1.5">{team?.name}</span>          </div>
         </div>
