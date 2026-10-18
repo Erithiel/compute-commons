@@ -12,6 +12,7 @@
     "test": "vitest run",
     "race-test": "tsx --env-file=.env.local --conditions=react-server scripts/race-test.ts",
     "mcp-smoke": "tsx --env-file=.env.local --conditions=react-server scripts/mcp-smoke.ts",
+    "seed-demo": "tsx --env-file=.env.local --conditions=react-server scripts/seed-demo.ts",
     "seed:accounts": "tsx --env-file=.env.local scripts/seed-accounts.ts"
   },
   "dependencies": {
