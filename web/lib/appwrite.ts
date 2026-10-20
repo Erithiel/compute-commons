@@ -42,6 +42,12 @@ export async function allRows<R>(table: string, queries: string[] = []): Promise
   }
 }
 
+/** Rows by id, 100 ids per query (Appwrite's cap on values in one equal()). */
+export async function rowsById<R>(table: string, ids: string[]): Promise<R[]> {
+  const chunks = Array.from({ length: Math.ceil(ids.length / 100) }, (_, i) => ids.slice(i * 100, i * 100 + 100));
+  return (await Promise.all(chunks.map((c) => allRows<R>(table, [Query.equal("$id", c)])))).flat();
+}
+
 /** One row, or null when it does not exist. */
 export async function rowOrNull<R>(table: string, id: string): Promise<R | null> {
   try {

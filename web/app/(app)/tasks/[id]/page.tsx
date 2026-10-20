@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireMember } from "@/lib/auth";
-import { buildPrompt, db, itemState, itemsOf, noteOf, who } from "@/lib/mock";
+import { buildPrompt, db, itemState, itemsOf, noteOf, queryLogs, who } from "@/lib/mock";
 import { itemPrompt } from "@/lib/prompt";
 import { saveMyNote, saveTask, suggestChange } from "@/app/actions";
 import { ItemsTable } from "@/components/client";
@@ -29,7 +30,7 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[id]">) {
   const items = task ? itemsOf(s, task.$id) : [];
   const rows = items.filter((i) => i.text);
   const single = items.length === 1 && !items[0].text ? itemState(s, items[0]) : null;
-  const logs = s.logs.filter((l) => l.taskId === id);
+  const logs = task ? await queryLogs(me.teamId, { taskId: task.$id }, 20) : [];
   const myNote = noteOf(s, id, me.$id);
   const columns = task?.columns ?? [];
   const valuesOf = (i: (typeof items)[number]) => {
@@ -144,6 +145,7 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[id]">) {
                       <p className="text-xs">{l.item && <span className="text-muted">{l.item}: </span>}{l.summary}</p>
                     </li>
                   ))}
+                  {logs.length === 20 && <li className="py-2 text-xs"><Link href={`/logs?task=${task!.$id}`} className={link}>All logs of this task</Link></li>}
                 </ul>
               ) : <p className="text-sm text-muted">Nothing done yet.</p>}
             </Card>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireMember } from "@/lib/auth";
-import { canTake, db, itemState, itemsOf, repeatLabel, who } from "@/lib/mock";
+import { canTake, db, itemState, itemsOf, lastLogs, repeatLabel, who } from "@/lib/mock";
 import { quickTask } from "@/app/actions";
 import { Badge, Card, PageHeader, btn, btnPrimary, control, input, link, type Tone } from "@/components/ui";
 
@@ -11,12 +11,13 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
   const q = (await searchParams) as Record<string, string | undefined>;
   const me = await requireMember();
   const s = await db();
+  const logOf = await lastLogs(s);
 
   const unfiltered = s.tasks
     .filter((t) => !q.mine || (t.assignees.length > 0 && canTake(t, me.$id)))
     .map((task) => ({
       task,
-      rows: itemsOf(s, task.$id).map((item) => ({ item, st: itemState(s, item), log: s.logs.find((l) => l.$id === item.lastLogId) ?? null })),
+      rows: itemsOf(s, task.$id).map((item) => ({ item, st: itemState(s, item), log: (item.lastLogId && logOf.get(item.lastLogId)) || null })),
     }));
   const all = unfiltered.flatMap((g) => g.rows); // counts ignore the status filter, so every count stays meaningful
   const groups = unfiltered

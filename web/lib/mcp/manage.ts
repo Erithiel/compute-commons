@@ -4,7 +4,7 @@ import "server-only";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { audit } from "../audit";
-import { itemState, itemsOf, loadStore, noteOf, promptOf, repeatLabel, who, type Store } from "../mock";
+import { itemState, itemsOf, loadStore, noteOf, promptOf, queryLogs, repeatLabel, who, type Store } from "../mock";
 import { deleteTask, patchTask, saveTask, type TaskInput } from "../tasks";
 import { changeRole, createInvite, removeMember, savePolicy } from "../teams";
 import type { Caller, Task } from "../types";
@@ -69,7 +69,7 @@ export function registerManageTools(server: McpServer) {
     return ok(`"${t.title}", prompt v${t.currentVersion}, ${repeatLabel(t)}.`, {
       ...overview(s, t), version: t.currentVersion, prompt: promptOf(s, t), myNote: noteOf(s, t.$id, caller.memberId),
       items: itemsOf(s, t.$id).map((i) => ({ itemId: i.$id, row: i.text, state: itemState(s, i).label })),
-      recentLogs: s.logs.filter((l) => l.taskId === t.$id).slice(0, 5)
+      recentLogs: (await queryLogs(caller.teamId, { taskId: t.$id }, 5))
         .map((l) => ({ at: l.finishedAt, by: who(s, l.by), row: l.item, outcome: l.outcome, summary: l.summary })),
     });
   }));
@@ -85,7 +85,7 @@ export function registerManageTools(server: McpServer) {
     const s = await loadStore(caller.teamId);
     const t = task ? taskRef(s, task) : null;
     const m = member ? memberRef(s, member) : null;
-    const logs = s.logs.filter((l) => (!t || l.taskId === t.$id) && (!m || l.by === m.$id) && (!outcome || l.outcome === outcome)).slice(0, limit ?? 20);
+    const logs = await queryLogs(caller.teamId, { taskId: t?.$id, by: m?.$id, outcome }, limit ?? 20);
     return ok(`${logs.length} log(s), newest first.`, logs.map((l) => ({
       at: l.finishedAt, by: who(s, l.by), task: s.tasks.find((x) => x.$id === l.taskId)?.title ?? "(deleted task)",
       row: l.item, outcome: l.outcome, summary: l.summary, details: l.details, version: l.version,

@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { db, who } from "@/lib/mock";
+import { db, queryLogs, who } from "@/lib/mock";
 import { Badge, PageHeader, btn, control, fmt, link, type Tone } from "@/components/ui";
 
 const tone: Record<string, Tone> = { done: "green", failed: "red", skipped: "amber" };
+const PAGE = 100;
 const cols = "md:grid-cols-[110px_140px_minmax(0,1fr)_80px_70px_16px]";
 
 function duration(from: string, to: string) {
@@ -12,10 +13,12 @@ function duration(from: string, to: string) {
 
 // Who executed what: every attempt on every task. Claude writes these through complete / fail / skip.
 export default async function LogsPage({ searchParams }: PageProps<"/logs">) {
-  const q = (await searchParams) as { task?: string; by?: string; outcome?: string };
+  const q = (await searchParams) as { task?: string; by?: string; outcome?: string; after?: string };
   const s = await db();
-  const logs = s.logs.filter((l) => (!q.task || l.taskId === q.task) && (!q.by || l.by === q.by) && (!q.outcome || l.outcome === q.outcome));
-  const people = [...new Set(s.logs.map((l) => l.by))];
+  const logs = await queryLogs(s.settings.teamId, { taskId: q.task, by: q.by, outcome: q.outcome }, PAGE, q.after);
+  const people = s.members.map((m) => m.$id);
+  const keep = Object.entries(q).filter(([k, v]) => v && k !== "after") as [string, string][];
+  const older = logs.length === PAGE && `?${new URLSearchParams([...keep, ["after", logs[PAGE - 1].$id]])}`;
 
   return (
     <>
@@ -72,6 +75,7 @@ export default async function LogsPage({ searchParams }: PageProps<"/logs">) {
         })}
         {!logs.length && <p className="p-8 text-center text-sm text-muted">No logs match these filters.</p>}
       </div>
+      {older && <p className="mt-3 text-sm"><Link href={older} className={link}>Older logs</Link></p>}
     </>
   );
 }
