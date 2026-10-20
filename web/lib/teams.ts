@@ -94,7 +94,7 @@ async function takeLeads(members: Member[], teamId: string, targetId: string, ke
   return lead ? marker(leadsKey(teamId, members), teamId) : "";
 }
 /** Runs the write; a failed write frees the marker so it does not block that lead set forever. */
-async function guarded<R>(lock: string, write: () => Promise<R>) {
+async function guarded(lock: string, write: () => Promise<unknown>) {
   try { await write(); } catch (e) {
     if (lock) await db().deleteRow(DB_ID, T.takeovers, lock).catch(() => {});
     throw e;
@@ -106,9 +106,10 @@ export async function changeRole(lead: Member, memberId: string, role: Role): Pr
   const problem = leadProblem(members, memberId, role);
   if (problem) return problem;
   const before = members.find((m) => m.$id === memberId)!.role;
+  if (before === role) return null; // no-op: a write would bump $updatedAt and change the lead-set key
   const lock = await takeLeads(members, lead.teamId, memberId, role === "lead");
   if (lock === null) return LEADS_BUSY;
-  await guarded(lock, () => db().updateRow(DB_ID, T.members, memberId, { role }));
+  await guarded(lock, async () => { await db().updateRow(DB_ID, T.members, memberId, { role }); });
   await audit(lead.teamId, lead.$id, "member.role", memberId, before, role);
   return null;
 }
@@ -120,10 +121,10 @@ export async function removeMember(actor: Member, memberId: string): Promise<str
   const problem = leadProblem(members, memberId, "remove");
   if (problem) return problem;
   const target = members.find((m) => m.$id === memberId)!;
+  const tokens = await allRows<{ $id: string }>(T.apiTokens, [Query.equal("owner", memberId), Query.equal("teamId", actor.teamId)]);
   const lock = await takeLeads(members, actor.teamId, memberId, false);
   if (lock === null) return LEADS_BUSY;
   // Tokens first: if this stops midway, the member row still exists and the action can be retried.
-  const tokens = await allRows<{ $id: string }>(T.apiTokens, [Query.equal("owner", memberId), Query.equal("teamId", actor.teamId)]);
   await guarded(lock, async () => {
     for (const t of tokens) await db().updateRow(DB_ID, T.apiTokens, t.$id, { revoked: true });
     await db().deleteRow(DB_ID, T.members, memberId);
