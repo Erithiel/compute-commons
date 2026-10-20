@@ -4,13 +4,12 @@
 // createRow on an existing id fails with 409, so a parallel burst gets exactly 5 slots.
 // (incrementRowColumn with max=5 was tried first: on 1.8.1 it caps the stored value but can report success
 // for a 6th parallel call, so it does not tell the caller whether it may proceed.)
+import { Query } from "node-appwrite";
 import { adminTables, DB_ID, isCode, T } from "./appwrite";
 import { attemptKey, LOGIN_MAX_FAILS, LOGIN_WINDOW_MS, loginWindow } from "./team-rules";
 
 const slots = Array.from({ length: LOGIN_MAX_FAILS }, (_, i) => i + 1);
 
-// ponytail: slot rows of failed windows stay until that email signs in again in the same window;
-// add a sweep of rows with windowStart older than 15 minutes if the table grows.
 /** Counts one attempt. True if it may proceed, false once this email used its 5 attempts in this window. */
 export async function registerAttempt(email: string, now = new Date()): Promise<boolean> {
   const windowStart = new Date(loginWindow(now) * LOGIN_WINDOW_MS).toISOString();
@@ -25,9 +24,12 @@ export async function registerAttempt(email: string, now = new Date()): Promise<
   return false;
 }
 
-/** Forgets this email's attempts in the current window (after a successful login). */
+/** Forgets this email's attempts in the current window (after a successful login), and up to 100 rows of ended windows. */
 export async function clearAttempts(email: string, now = new Date()) {
-  await Promise.all(slots.map((slot) => adminTables().deleteRow(DB_ID, T.loginAttempts, attemptKey(email, now, slot)).catch((e) => {
+  const windowStart = new Date(loginWindow(now) * LOGIN_WINDOW_MS).toISOString();
+  const { rows } = await adminTables().listRows(DB_ID, T.loginAttempts, [Query.lessThan("windowStart", windowStart), Query.limit(100)]);
+  const ids = [...slots.map((slot) => attemptKey(email, now, slot)), ...rows.map((r) => r.$id)];
+  await Promise.all(ids.map((id) => adminTables().deleteRow(DB_ID, T.loginAttempts, id).catch((e) => {
     if (!isCode(e, 404)) throw e;
   })));
 }

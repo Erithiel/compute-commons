@@ -73,8 +73,8 @@ export async function listEligible(caller: Caller, limit = 10) {
     .sort((a, b) => order.get(a.taskId)! - order.get(b.taskId)! || a.position - b.position);
   const picked = sortWork(free).slice(0, limit);
   const logIds = picked.map((i) => i.lastLogId).filter((x): x is string => !!x);
-  const logs = logIds.length ? await allRows<Log>(T.logs, [Query.equal("$id", logIds)]) : [];
-  return picked.map((item) => ({ item, task: taskOf.get(item.taskId)!, lastLog: logs.find((l) => l.$id === item.lastLogId) ?? null }));
+  const logOf = new Map((await rowsById<Log>(T.logs, logIds)).map((l) => [l.$id, l]));
+  return picked.map((item) => ({ item, task: taskOf.get(item.taskId)!, lastLog: (item.lastLogId && logOf.get(item.lastLogId)) || null }));
 }
 
 /** Take one item. The server is the only judge of "free". */
@@ -123,8 +123,7 @@ export async function claim(itemId: string, caller: Caller, leaseMinutes = LEASE
 /** Claim the best free item for the caller (the next_task MCP tool), or null when nothing is left. */
 export async function claimNext(caller: Caller): Promise<{ item: TaskItem; task: Task; leaseUntil: string } | null> {
   const now = new Date();
-  // ponytail: looks at the first 100 free items only; page through listEligible if one member gives up on more than that in 12h.
-  for (const { item, task, lastLog } of await listEligible(caller, 100)) {
+  for (const { item, task, lastLog } of await listEligible(caller, Infinity)) {
     if (gaveUpRecently(lastLog, caller.memberId, now)) continue;
     const r = await claim(item.$id, caller);
     if (r.ok) return { item, task, leaseUntil: r.leaseUntil };

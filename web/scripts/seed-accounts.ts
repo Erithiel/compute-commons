@@ -1,7 +1,7 @@
 // Dev seed: login accounts for the sample members (Rati, Nino, Giorgi in team "rando").
 //   npm run seed:accounts
 // Run `npm run setup:appwrite -- --sample` first. Safe to run again: existing accounts are reused.
-// ponytail: demo passwords live in the repo; never run this against a real team.
+// The passwords below are public (they are in the repo), so the script refuses to run unless SEED_DEMO=yes is set.
 import { Client, ID, Query, TablesDB, Users } from "node-appwrite";
 import { DB_ID, T } from "../lib/tables";
 
@@ -12,6 +12,7 @@ const ACCOUNTS = [
 ];
 
 async function main() {
+  if (process.env.SEED_DEMO !== "yes") throw new Error("Demo accounts have public passwords. Only for a dev project: SEED_DEMO=yes npm run seed:accounts");
   const client = new Client().setEndpoint(process.env.APPWRITE_ENDPOINT!).setProject(process.env.APPWRITE_PROJECT_ID!).setKey(process.env.APPWRITE_API_KEY!);
   const users = new Users(client);
   const tables = new TablesDB(client);
