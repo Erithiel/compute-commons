@@ -13,7 +13,7 @@ export interface Invite {
 export type Caller =
   { kind: "member"; memberId: string; teamId: string; role: Role };
 
-export interface Member { $id: string; teamId: string; userId: string; name: string; role: Role }
+export interface Member { $id: string; teamId: string; userId: string; name: string; role: Role; $updatedAt?: string }
 
 /** A task is a title and a prompt. The prompt can ask for anything; we only store, hand out and track it. */
 export interface Task {

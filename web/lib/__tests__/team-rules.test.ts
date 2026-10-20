@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { attemptKey, emailKey, hashCode, inviteProblem, leadProblem, minutesLeft, newInviteCode, safeNext } from "../team-rules";
+import { attemptKey, emailKey, hashCode, inviteProblem, leadProblem, leadsKey, minutesLeft, newInviteCode, safeNext } from "../team-rules";
 import type { Invite, Member } from "../types";
 
 const now = new Date("2026-10-20T12:00:00Z");
@@ -40,6 +40,16 @@ describe("a team keeps at least one lead", () => {
     expect(leadProblem(team, "b", "remove")).toBeNull();
   });
   it("unknown member", () => expect(leadProblem(team, "zz", "remove")).toMatch(/not found/));
+});
+
+describe("leadsKey", () => {
+  const at = (id: string, role: Member["role"], u: string): Member => ({ ...mem(id, role), $updatedAt: u });
+  it("same leads in any order give one key; a changed $updatedAt or lead set gives another", () => {
+    const a = at("a", "lead", "1"), b = at("b", "lead", "1");
+    expect(leadsKey("t1", [a, b, at("c", "member", "9")])).toBe(leadsKey("t1", [b, a]));
+    expect(leadsKey("t1", [a, b])).not.toBe(leadsKey("t1", [at("a", "lead", "2"), b]));
+    expect(leadsKey("t1", [a, b])).not.toBe(leadsKey("t1", [a]));
+  });
 });
 
 describe("login throttle", () => {

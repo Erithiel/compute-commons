@@ -1,17 +1,31 @@
 // Teams, memberships and invites. Checks that need the database live here; pure rules are in team-rules.ts.
 import "server-only";
+import { createHash } from "node:crypto";
 import { ID, Query } from "node-appwrite";
 import { adminTables, allRows, DB_ID, isCode, rowOrNull, T, teamRow } from "./appwrite";
 import { audit } from "./audit";
 import { DEFAULT_POLICY } from "./tables";
 import { normalise } from "./tasks";
-import { hashCode, INVITE_DAYS, inviteProblem, leadProblem, newInviteCode } from "./team-rules";
+import { hashCode, INVITE_DAYS, INVITE_USED, inviteProblem, leadProblem, leadsKey, newInviteCode } from "./team-rules";
 import type { Invite, Member, Role, Settings, Team } from "./types";
 
 const db = () => adminTables();
 const now = () => new Date().toISOString();
 type User = { $id: string; name: string; email: string };
 export const ALREADY = "You are already in a team. Leave it first (Settings) to join another.";
+const LEADS_BUSY = "Someone else just changed this team's leads. Reload and try again.";
+
+/** One-winner lock: a takeovers row whose id is a hash of key. Returns the id, or null if someone already took it (409). */
+async function marker(key: string, itemId: string): Promise<string | null> {
+  const id = createHash("sha256").update(key).digest("hex").slice(0, 36);
+  try {
+    await db().createRow(DB_ID, T.takeovers, id, { itemId });
+    return id;
+  } catch (e) {
+    if (isCode(e, 409)) return null;
+    throw e;
+  }
+}
 
 /** The creator becomes the team's first lead. The member row goes first: its unique userId index stops double teams. */
 export async function createTeam(user: User, name: string): Promise<string> {
@@ -52,8 +66,6 @@ export async function findInvite(code: string) {
   return { invite, team };
 }
 
-// ponytail: two people opening the same link in the same instant could both join (check, then mark used).
-// The link is secret and one-time; a lock row (as in claims) if this ever matters.
 export async function joinTeam(user: User, code: string): Promise<string | null> {
   const found = await findInvite(code);
   const problem = inviteProblem(found?.invite ?? null, new Date());
@@ -66,19 +78,37 @@ export async function joinTeam(user: User, code: string): Promise<string | null>
     if (isCode(e, 409)) return ALREADY;
     throw e;
   }
+  // Marker row: only one joiner gets it per invite; the loser's member row is undone.
+  if (!(await marker(`invite|${invite.$id}`, invite.$id))) {
+    await db().deleteRow(DB_ID, T.members, row.$id).catch(() => {});
+    return INVITE_USED;
+  }
   await db().updateRow(DB_ID, T.invites, invite.$id, { usedBy: row.$id, usedAt: now() });
   await audit(invite.teamId, row.$id, "member.join", row.$id, undefined, { role: invite.role, invite: invite.$id });
   return null;
 }
 
-// ponytail: changeRole and removeMember check "one lead left", then write. Two leads demoting or removing each
-// other in the same instant can both pass and leave the team with no lead. A per-team lock row (as in claims) if this ever matters.
+/** Taking a lead away needs the marker for the current lead set: two leads removing each other at once cannot both win. */
+async function takeLeads(members: Member[], teamId: string, targetId: string, keepsLead: boolean) {
+  const lead = members.find((m) => m.$id === targetId)?.role === "lead" && !keepsLead;
+  return lead ? marker(leadsKey(teamId, members), teamId) : "";
+}
+/** Runs the write; a failed write frees the marker so it does not block that lead set forever. */
+async function guarded<R>(lock: string, write: () => Promise<R>) {
+  try { await write(); } catch (e) {
+    if (lock) await db().deleteRow(DB_ID, T.takeovers, lock).catch(() => {});
+    throw e;
+  }
+}
+
 export async function changeRole(lead: Member, memberId: string, role: Role): Promise<string | null> {
   const members = await allRows<Member>(T.members, [Query.equal("teamId", lead.teamId)]);
   const problem = leadProblem(members, memberId, role);
   if (problem) return problem;
   const before = members.find((m) => m.$id === memberId)!.role;
-  await db().updateRow(DB_ID, T.members, memberId, { role });
+  const lock = await takeLeads(members, lead.teamId, memberId, role === "lead");
+  if (lock === null) return LEADS_BUSY;
+  await guarded(lock, () => db().updateRow(DB_ID, T.members, memberId, { role }));
   await audit(lead.teamId, lead.$id, "member.role", memberId, before, role);
   return null;
 }
@@ -90,10 +120,14 @@ export async function removeMember(actor: Member, memberId: string): Promise<str
   const problem = leadProblem(members, memberId, "remove");
   if (problem) return problem;
   const target = members.find((m) => m.$id === memberId)!;
+  const lock = await takeLeads(members, actor.teamId, memberId, false);
+  if (lock === null) return LEADS_BUSY;
   // Tokens first: if this stops midway, the member row still exists and the action can be retried.
   const tokens = await allRows<{ $id: string }>(T.apiTokens, [Query.equal("owner", memberId), Query.equal("teamId", actor.teamId)]);
-  for (const t of tokens) await db().updateRow(DB_ID, T.apiTokens, t.$id, { revoked: true });
-  await db().deleteRow(DB_ID, T.members, memberId);
+  await guarded(lock, async () => {
+    for (const t of tokens) await db().updateRow(DB_ID, T.apiTokens, t.$id, { revoked: true });
+    await db().deleteRow(DB_ID, T.members, memberId);
+  });
   await audit(actor.teamId, actor.$id, actor.$id === memberId ? "member.leave" : "member.remove", memberId, target, { tokensRevoked: tokens.length });
   return null;
 }
