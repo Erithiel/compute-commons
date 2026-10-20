@@ -3,7 +3,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { ID, Query } from "node-appwrite";
-import { adminTables, allRows, DB_ID, isCode, rowOrNull, T, teamRow } from "./appwrite";
+import { adminTables, allRows, DB_ID, isCode, rowOrNull, rowsById, T, teamRow } from "./appwrite";
 import type { Caller, Claim, Log, Task, TaskItem } from "./types";
 
 const DAY = 86_400_000;
