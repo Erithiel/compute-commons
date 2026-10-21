@@ -193,7 +193,7 @@ compute-commons/
 | `CRM_URL` | Vercel + local | The CRM app, `https://team.rando.ge`, for the approved list. |
 | `RELAY_API_KEY` | Vercel + local, **and the CRM** | Shared secret for the CRM's `/api/bridge/relay/approved`. |
 | `RELAY_TEST_USERS` | local only | Comma-separated fake approved user ids for `npm run mcp-smoke`; ignored in production. |
-| `APP_URL` | Vercel + local | Public address of the app, used for the Google sign-in callback (`http://localhost:3123` locally). |
+| `APP_URL` | Vercel + local | Public address of the app, used for the Google sign-in callback: `https://routines.rando.ge` (`http://localhost:3123` locally). Both `<APP_URL>/**` are in the CRM Supabase's `ADDITIONAL_REDIRECT_URLS` (added 2026-10-21). |
 
 ## 11. Build order for the hackathon
 
