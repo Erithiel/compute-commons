@@ -5,12 +5,13 @@ import { cookies } from "next/headers";
 import { Account, AppwriteException, Client, Query, TablesDB, Users } from "node-appwrite";
 import { DB_ID } from "./tables";
 
-const endpoint = process.env.APPWRITE_ENDPOINT!;
-const project = process.env.APPWRITE_PROJECT_ID!;
-
 export { DB_ID, T } from "./tables";
 
-const base = () => new Client().setEndpoint(endpoint).setProject(project);
+function base() {
+  const endpoint = process.env.APPWRITE_ENDPOINT, project = process.env.APPWRITE_PROJECT_ID;
+  if (!endpoint || !project) throw new Error("APPWRITE_ENDPOINT / APPWRITE_PROJECT_ID are not set (web/.env.local)");
+  return new Client().setEndpoint(endpoint).setProject(project);
+}
 
 function admin() {
   const key = process.env.APPWRITE_API_KEY;

@@ -189,7 +189,7 @@ compute-commons/
 | `APPWRITE_API_KEY` | Vercel + local (server only) | Scoped to this project's databases and users. Never in the repo. |
 | `APPWRITE_DATABASE_ID` | Vercel + local | `commons` |
 | `SESSION_COOKIE_NAME` | optional | Defaults to `commons_session`. |
-| `APP_URL` | Vercel + local | Public address of the app, used to build invite links (`http://localhost:3000` locally). |
+| `APP_URL` | Vercel + local | Public address of the app, used to build invite links (`http://localhost:3123` locally). |
 
 ## 11. Build order for the hackathon
 

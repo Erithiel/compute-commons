@@ -3,11 +3,12 @@ import { MCP_INSTRUCTIONS, SETUP_PROMPT } from "@/lib/mock";
 import { CopyButton, TokenForm } from "@/components/client";
 import { Card, PageHeader, link } from "@/components/ui";
 
-const APP_URL = process.env.APP_URL ?? "http://localhost:3000"; // the deployed URL in production
+const APP_URL = process.env.APP_URL; // the deployed URL in production
 
 // One-time setup: connect Claude to our MCP server. After this, Claude fetches tasks by itself.
 export default async function SetupPage() {
   await requireMember();
+  if (!APP_URL) throw new Error("APP_URL is not set on the server.");
 
   return (
     <>

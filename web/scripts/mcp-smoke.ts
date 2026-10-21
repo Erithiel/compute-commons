@@ -11,7 +11,7 @@ import { saveTask } from "../lib/tasks";
 import { createToken } from "../lib/tokens";
 
 const TEAM_ID = "mcp-smoke";
-const MCP_URL = new URL(process.env.MCP_URL ?? "http://localhost:3000/api/mcp");
+const MCP_URL = new URL(process.env.MCP_URL ?? "http://localhost:3123/api/mcp");
 const db = adminTables();
 
 type Result = { content: unknown; isError?: boolean };
