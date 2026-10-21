@@ -6,7 +6,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { audit } from "../audit";
 import { itemState, itemsOf, loadStore, noteOf, promptOf, queryLogs, repeatLabel, who, type Store } from "../mock";
 import { deleteTask, patchTask, saveTask, type TaskInput } from "../tasks";
-import { changeRole, createInvite, removeMember, savePolicy } from "../teams";
+import { changeRole, savePolicy } from "../teams";
 import type { Caller, Task } from "../types";
 import { leadOnly, ok, pickOne, run } from "./reply";
 
@@ -164,16 +164,6 @@ export function registerManageTools(server: McpServer) {
     return ok("Saved the team policy.");
   }));
 
-  server.registerTool("invite_member", {
-    description: "Create a one-time invite link (valid 7 days) for a new team member. Give the link to that person: they open it, sign up and join with this role. Then they create their own Claude token in the web app (Connect Claude).",
-    inputSchema: z.object({ role: role.optional() }),
-  }, async ({ role: r }, ctx) => run(ctx, async (caller) => {
-    leadOnly(caller);
-    if (!process.env.APP_URL) throw new Error("APP_URL is not set on the server, so no invite link can be made.");
-    const { code, invite } = await createInvite(actor(await loadStore(caller.teamId), caller), r ?? "member");
-    return ok(`Invite link for a new ${invite.role} (works once, until ${invite.expiresAt}).`, { link: `${process.env.APP_URL}/join/${code}` });
-  }));
-
   server.registerTool("set_member_role", {
     description: "Make a member a lead (can create and edit tasks) or a member.",
     inputSchema: z.object({ member: memberArg, role }),
@@ -184,18 +174,5 @@ export function registerManageTools(server: McpServer) {
     const refused = await changeRole(actor(s, caller), m.$id, r);
     if (refused) throw new Error(refused);
     return ok(`"${m.name}" is now a ${r}.`);
-  }));
-
-  server.registerTool("remove_member", {
-    description: "Remove a member from the team. Their tokens stop working; their logs stay. Confirm with the user first.",
-    inputSchema: z.object({ member: memberArg }),
-    annotations: { destructiveHint: true },
-  }, async ({ member }, ctx) => run(ctx, async (caller) => {
-    leadOnly(caller);
-    const s = await loadStore(caller.teamId);
-    const m = memberRef(s, member);
-    const refused = await removeMember(actor(s, caller), m.$id);
-    if (refused) throw new Error(refused);
-    return ok(`Removed "${m.name}". Their tokens are revoked.`);
   }));
 }

@@ -63,7 +63,7 @@ export const SCHEMA: Record<string, { name: string; columns: Col[]; indexes: Idx
   [T.takeovers]: {
     // Row id = hash(item id + the expired claim's claimedAt). Creating it is the lock for taking over an expired claim;
     // Appwrite 1.8.1 transactions did not stop two takeovers at once (race test). Never deleted, so a stale read cannot win later.
-    // Also holds the one-winner markers of lib/teams.ts (invite joins, lead changes); itemId is then the invite or team id.
+    // Also holds the one-winner markers of lib/teams.ts (lead changes); itemId is then the team id.
     name: "One-winner markers",
     columns: [id("itemId")],
     indexes: [],
@@ -92,18 +92,6 @@ export const SCHEMA: Record<string, { name: string; columns: Col[]; indexes: Idx
     name: "Teams",
     columns: [{ key: "name", type: "varchar", size: 128, required: true }, id("createdBy"), at("createdAt")],
     indexes: [],
-  },
-  [T.invites]: {
-    name: "Invites",
-    columns: [id("teamId"), { key: "codeHash", type: "varchar", size: 64, required: true },
-      { key: "role", type: "enum", elements: ["lead", "member"], required: true }, id("createdBy"), at("expiresAt"),
-      id("usedBy", false), at("usedAt", false), { key: "revoked", type: "boolean", required: false, default: false }],
-    indexes: [{ key: "code", type: "unique", columns: ["codeHash"] }, { key: "team", type: "key", columns: ["teamId"] }],
-  },
-  [T.loginAttempts]: {
-    name: "Login attempts", // row id = attemptKey(email, window, slot); see lib/throttle.ts
-    columns: [{ key: "fails", type: "integer", required: false, default: 0 }, at("windowStart")],
-    indexes: [{ key: "window", type: "key", columns: ["windowStart"] }], // clearAttempts sweeps ended windows
   },
   [T.audit]: {
     name: "Audit log",

@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useActionState, useState } from "react";
-import { createToken, makeInvite } from "@/app/actions";
-import { btn, btnPrimary, control, input, link } from "./ui";
+import { createToken } from "@/app/actions";
+import { btn, btnPrimary, input, link } from "./ui";
 
 const links = [
   ["/board", "Board"], ["/tasks", "Tasks"], ["/logs", "Logs"], ["/setup", "Connect Claude"], ["/settings", "Settings"],
@@ -134,26 +134,6 @@ export function TokenForm({ appUrl }: { appUrl: string }) {
           <p className="mb-2 font-medium">Shown once. Copy it now.</p>
           <pre className="mb-2 overflow-x-auto whitespace-pre-wrap break-all rounded bg-paper p-2 font-mono text-xs">{cmd}</pre>
           <CopyButton text={cmd} label="Copy command" />
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function InviteForm() {
-  const [state, action, pending] = useActionState(makeInvite, null);
-  return (
-    <div className="space-y-3">
-      <form action={action} className="flex flex-wrap gap-2 sm:flex-nowrap">
-        <select name="role" aria-label="Role" className={control}><option value="member">Member</option><option value="lead">Lead</option></select>
-        <button className={btnPrimary} disabled={pending}>Create invite link</button>
-      </form>
-      {state && "error" in state && <p role="alert" className="text-sm text-red-600">{state.error}</p>}
-      {state && "link" in state && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-          <pre className="mb-2 overflow-x-auto whitespace-pre-wrap break-all rounded bg-paper p-2 font-mono text-xs">{state.link}</pre>
-          <p className="mb-2 text-xs text-muted">Send this link to one person. It works once, for 7 days.</p>
-          <CopyButton text={state.link} />
         </div>
       )}
     </div>

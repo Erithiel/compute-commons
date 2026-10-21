@@ -1,8 +1,7 @@
-// Server-only Appwrite access (plan §3.2). The browser never talks to Appwrite in v1.
+// Server-only Appwrite access (plan §3.2): Relay's database. The browser never talks to Appwrite; accounts are the CRM's (lib/crm.ts).
 // node-appwrite is pinned to 22.1.3: the last SDK built for API 1.8.1, which api.rando.ge runs.
 import "server-only";
-import { cookies } from "next/headers";
-import { Account, AppwriteException, Client, Query, TablesDB, Users } from "node-appwrite";
+import { AppwriteException, Client, Query, TablesDB } from "node-appwrite";
 import { DB_ID } from "./tables";
 
 export { DB_ID, T } from "./tables";
@@ -20,15 +19,6 @@ function admin() {
 }
 
 export const adminTables = () => new TablesDB(admin());
-export const adminUsers = () => new Users(admin());
-
-/** Account service with the API key: only for createEmailPasswordSession (it returns the session secret only to an API key). */
-export const adminAccount = () => new Account(admin());
-
-export async function sessionAccount(): Promise<Account | null> {
-  const secret = (await cookies()).get(process.env.SESSION_COOKIE_NAME ?? "commons_session")?.value;
-  return secret ? new Account(base().setSession(secret)) : null;
-}
 
 export const isCode = (e: unknown, code: number) => e instanceof AppwriteException && e.code === code;
 

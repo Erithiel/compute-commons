@@ -14,8 +14,8 @@ export const MCP_INSTRUCTIONS = [
   "- When the user describes work in plain words, turn it into tasks. A task is a title and a prompt: free text saying what to do and where the result goes.",
   "- A routine is a task with repeatDays (7 = weekly). Rows are the things to do it for (clients, sites, files): the same prompt runs once per row, and each row is claimed separately.",
   "- Call list_members and list_tasks first. Assign people by name; no assignees means anyone may take it. Then create_task, or view_task and update_task to change one.",
-  "- Confirm with the user before delete_task, remove_member, or removing rows.",
-  "- get_policy / set_policy: rules placed before every prompt. invite_member (one-time join link) / set_member_role / remove_member manage the team. board and list_logs show who did what.",
+  "- Confirm with the user before delete_task or removing rows.",
+  "- get_policy / set_policy: rules placed before every prompt. set_member_role makes someone a lead or a member; people join and leave through the Rando CRM. board and list_logs show who did what.",
 ].join("\n");
 
 /** What the dispatcher hands a fresh subagent for one claimed item. Sent with every next_task, so it updates without re-pasting. */

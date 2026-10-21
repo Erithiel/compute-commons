@@ -2,13 +2,7 @@ export type Role = "lead" | "member";
 export type ItemStatus = "available" | "done" | "failed" | "skipped";
 export type Outcome = "done" | "failed" | "skipped";
 
-export interface Team { $id: string; name: string; createdBy: string /* Appwrite user id */; createdAt: string }
-
-/** One-time link to join a team. Only the hash of the code is stored. */
-export interface Invite {
-  $id: string; teamId: string; codeHash: string; role: Role; createdBy: string /* memberId */;
-  expiresAt: string; usedBy: string | null /* memberId */; usedAt: string | null; revoked: boolean;
-}
+export interface Team { $id: string; name: string; createdBy: string /* CRM (Supabase) user id */; createdAt: string }
 
 export type Caller =
   { kind: "member"; memberId: string; teamId: string; role: Role };

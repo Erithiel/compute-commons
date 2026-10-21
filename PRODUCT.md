@@ -41,7 +41,7 @@ Coordination for work done in each person's own Claude: the app never runs AI it
 - No approval step, no run budget setting, no priorities, no template syntax, no code-specific fields (branch links, risk labels). Where results go is written in the prompt or team policy.
 - Stack: Next.js (App Router) + Appwrite, server-only Appwrite access. Currently runs on in-memory mock data; Appwrite auth and tables are being wired feature by feature.
 - Terminology: task, row (item), claim, log, team policy, note, token, schedule. "Board", "Tasks", "Logs", "Connect Claude", "Settings" are the app's sections.
-- Open: product name ("Compute Commons" is a working title), licence, domain, deployed URL.
+- Domain: https://routines.rando.ge. Open: product name ("Compute Commons" is a working title), licence.
 
 ## Brand Commitments
 

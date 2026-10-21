@@ -1,18 +1,13 @@
-import { Query } from "node-appwrite";
-import { allRows, T } from "@/lib/appwrite";
 import { requireMember } from "@/lib/auth";
 import { db, who } from "@/lib/mock";
-import { cancelInvite, leaveTeam, removeMember, revokeToken, saveSettings, setRole } from "@/app/actions";
+import { revokeToken, saveSettings, setRole } from "@/app/actions";
 import { ActionForm } from "@/components/auth-forms";
-import { InviteForm } from "@/components/client";
-import type { Invite } from "@/lib/types";
 import { Badge, Card, LeadOnly, PageHeader, btn, btnPrimary, control, fmt, input, label, link } from "@/components/ui";
 
 export default async function SettingsPage() {
   const me = await requireMember();
   const s = await db();
   const lead = me.role === "lead";
-  const invites = lead ? await allRows<Invite>(T.invites, [Query.equal("teamId", me.teamId), Query.isNull("usedBy"), Query.equal("revoked", false), Query.greaterThan("expiresAt", new Date().toISOString())]) : [];
   const tokens = s.apiTokens.filter((t) => lead || t.owner === me.$id);
 
   return (
@@ -45,51 +40,26 @@ export default async function SettingsPage() {
           </ul>
         </Card>
 
-        {lead && (
-          <Card title="Invite">
-            <InviteForm />
-            <ul className="mt-3 divide-y divide-line text-sm">
-              {invites.map((i) => (
-                <li key={i.$id} className="flex items-center justify-between gap-2 py-2">
-                  <span>{i.role} <span className="text-xs text-muted">· by {who(s, i.createdBy)} · expires {fmt(i.expiresAt)}</span></span>
-                  <form action={cancelInvite}><input type="hidden" name="id" value={i.$id} /><button className={btn}>Cancel</button></form>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-
         <Card title="Members" actions={!lead && <LeadOnly />}>
+          <p className="mb-2 text-xs text-muted">Everyone approved in the Rando CRM joins on their first sign-in. To remove someone, unapprove them in the CRM: their sign-in and MCP tokens stop within 5 minutes.</p>
           <ul className="divide-y divide-line text-sm">
             {s.members.map((m) => (
               <li key={m.$id} className="flex items-center justify-between gap-2 py-2">
                 <span>{m.name}</span>
                 {lead && m.$id !== me.$id ? (
-                  <div className="flex gap-2">
-                    <ActionForm action={setRole}>
-                      <div className="flex gap-1">
-                        <input type="hidden" name="id" value={m.$id} />
-                        <select name="role" aria-label={`Role for ${m.name}`} defaultValue={m.role} className={`${control} py-1`}>
-                          <option>lead</option><option>member</option>
-                        </select>
-                        <button className={btn}>Set</button>
-                      </div>
-                    </ActionForm>
-                    <ActionForm action={removeMember}><input type="hidden" name="id" value={m.$id} /><button className={btn}>Remove</button></ActionForm>
-                  </div>
+                  <ActionForm action={setRole}>
+                    <div className="flex gap-1">
+                      <input type="hidden" name="id" value={m.$id} />
+                      <select name="role" aria-label={`Role for ${m.name}`} defaultValue={m.role} className={`${control} py-1`}>
+                        <option>lead</option><option>member</option>
+                      </select>
+                      <button className={btn}>Set</button>
+                    </div>
+                  </ActionForm>
                 ) : <Badge tone={m.role === "lead" ? "amber" : "gray"}>{m.role}</Badge>}
               </li>
             ))}
           </ul>
-        </Card>
-
-        <Card title="Leave team">
-          <ActionForm action={leaveTeam}>
-            <div className="flex items-center gap-3">
-              <button className={btn}>Leave team</button>
-              <span className="text-xs text-muted">Your MCP tokens stop working.</span>
-            </div>
-          </ActionForm>
         </Card>
 
         {lead && (
