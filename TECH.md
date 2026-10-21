@@ -117,7 +117,7 @@ The server also sends `instructions` when Claude connects: the workflow for doin
 
 ## 6. Authentication
 
-**Web app.** Accounts are Appwrite email + password users (D26). `lib/auth.ts` creates the session on the server with the API key and keeps its secret in an httpOnly cookie (`SESSION_COOKIE_NAME`, `sameSite: lax`, `secure` in production, expiring with the session). Every later request acts as that user. API-key calls skip Appwrite's rate limits, so `lib/throttle.ts` counts login attempts itself, before the password check: after 5 attempts in a fixed 15-minute window an email is locked until that window ends, and the error says how many minutes are left (D28). Refusals (wrong password, locked, bad invite) return `{ error }` to the form instead of throwing, because production builds hide thrown messages. `?next=` after login accepts only same-site paths. GitHub sign-in can be added later through Appwrite's OAuth providers.
+**Web app.** Accounts are the Rando CRM's (D32): `/login` is "Sign in with Google" through the CRM's Supabase (`@supabase/ssr`, PKCE). `/auth/callback` trades the code for the session, kept in Supabase's httpOnly cookies and refreshed by `proxy.ts`; pages verify it with `getClaims()` (never `getSession()`). `lib/crm.ts` then checks the user against the CRM's approved list (`GET <CRM_URL>/api/bridge/relay/approved`, header `x-api-key: RELAY_API_KEY`, cached 5 minutes, refetched on a miss), and `lib/teams.ts` `memberFor` adds them to the one team on their first visit (first person = lead). Signed in but not approved → `/login?error=denied`. The CRM's Supabase must list `<APP_URL>/auth/callback` in its allowed redirect URLs (`ADDITIONAL_REDIRECT_URLS` on the server), or Google sends people back to the CRM. `?next=` after login accepts only same-site paths.
 
 - *Pages:* `/login`, `/signup`, `/welcome` (a new account creates a team and becomes its lead) and `/join/[code]`.
 - *Invite links (D27):* a lead makes a one-time link in Settings (`APP_URL/join/<code>`, role chosen, valid 7 days, hash stored). There is no email sending. Settings also changes roles, removes members, and lets a member leave. Each of these writes an audit entry.
@@ -125,7 +125,7 @@ The server also sends `instructions` when Claude connects: the workflow for doin
 - *Code:* `lib/auth.ts` (session, throttle), `lib/teams.ts` (create team, invites, roles), `lib/team-rules.ts` (pure rules, tested).
 - *Existing sample data:* after signing up, `npm run link-member -- <memberId> <email>` attaches a sample member row (m1, m2, m3) to that account, so the person keeps its role, notes, logs and tokens. The account must not be in a team yet.
 
-**MCP endpoint.** Each member (and each routine) gets a personal API token created in the web app. Only its hash is stored, and it can be revoked.
+**MCP endpoint.** Each member (and each routine) gets a personal API token created in the web app. Only its hash is stored, and it can be revoked. A token works only while its owner is approved in the CRM (same check as the web app, D32).
 - *Claude Code (a person's session):* `claude mcp add --transport http commons https://<app>/api/mcp --header "Authorization: Bearer <token>"`.
 - *Claude routines (cloud):* routines use connectors set up in Claude. Checked in Claude's connector authentication docs (2026-10-17): connectors support three ways to authenticate.
   - **OAuth** (DCR or CIMD), supported by default. Each user signs in.
@@ -139,12 +139,12 @@ The server also sends `instructions` when Claude connects: the workflow for doin
 
 | Page | For | Contents |
 |---|---|---|
-| `/login` | everyone | Email + password. |
+| `/login` | everyone | Sign in with Google (the Rando CRM account). |
 | `/board` | everyone | Read-only: per task, each row (or the task) as free / in progress by X until HH:MM / done / failed, with the last log line. Quick "add task". No claim buttons: only Claude claims. |
 | `/tasks` | lead edits, members read | Task list and editor: title, **prompt** (anything), optional **rows table** (add, remove, paste many; read-only status per row), repeat (once / every N days), assigned to; **my note** (any member, only their Claude gets it); prompt history, preview. |
 | `/logs` | everyone | Who executed what: when, who, task, row, outcome, duration, summary; expand for details. |
 | `/setup` | everyone | **Connect Claude**, once: create a token, guide to add the connector, and **"copy prompt"** for the Claude scheduled task. |
-| `/settings` | lead | Members and roles, team policy, API tokens. |
+| `/settings` | lead | Member roles, team policy, API tokens. People join and leave through the CRM. |
 | `/settings/tokens` | everyone | Create or revoke your own MCP token; shows the `claude mcp add` command. |
 
 ## 8. What a Claude schedule looks like
@@ -188,8 +188,12 @@ compute-commons/
 | `APPWRITE_PROJECT_ID` | Vercel + local | New project for this app, separate from client sites. |
 | `APPWRITE_API_KEY` | Vercel + local (server only) | Scoped to this project's databases and users. Never in the repo. |
 | `APPWRITE_DATABASE_ID` | Vercel + local | `commons` |
-| `SESSION_COOKIE_NAME` | optional | Defaults to `commons_session`. |
-| `APP_URL` | Vercel + local | Public address of the app, used to build invite links (`http://localhost:3123` locally). |
+| `CRM_SUPABASE_URL` | Vercel + local | The CRM's Supabase, `https://api.team.rando.ge`. |
+| `CRM_SUPABASE_KEY` | Vercel + local | The CRM's publishable (anon) key. Never its service-role key. |
+| `CRM_URL` | Vercel + local | The CRM app, `https://team.rando.ge`, for the approved list. |
+| `RELAY_API_KEY` | Vercel + local, **and the CRM** | Shared secret for the CRM's `/api/bridge/relay/approved`. |
+| `RELAY_TEST_USERS` | local only | Comma-separated fake approved user ids for `npm run mcp-smoke`; ignored in production. |
+| `APP_URL` | Vercel + local | Public address of the app, used for the Google sign-in callback (`http://localhost:3123` locally). |
 
 ## 11. Build order for the hackathon
 

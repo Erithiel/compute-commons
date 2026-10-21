@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { teamRow, T } from "@/lib/appwrite";
 import { audit } from "@/lib/audit";
 import { requireLead, requireMember } from "@/lib/auth";
-import { changeRole, createInvite, removeMember as removeMemberRow, revokeInvite, savePolicy } from "@/lib/teams";
+import { changeRole, savePolicy } from "@/lib/teams";
 import { rowText, saveNote, saveTask as saveTaskRow } from "@/lib/tasks";
 import { createToken as newToken, revokeToken as revoke } from "@/lib/tokens";
 import type { ApiToken, Role } from "@/lib/types";
@@ -56,20 +56,9 @@ export async function quickTask(f: FormData) {
   done();
 }
 
-// --- Settings: policy (F3), members (F1), tokens (F5). Member and policy writes live in lib/team.ts (shared with MCP). ---
+// --- Settings: policy (F3), member roles (F1), tokens (F5). People join and leave through the CRM (D32). Member and policy writes live in lib/team.ts (shared with MCP). ---
 export async function saveSettings(f: FormData) {
   await savePolicy(await requireLead(), String(f.get("policy") ?? ""));
-  done();
-}
-export async function makeInvite(_: unknown, f: FormData): Promise<{ link: string } | { error: string } | null> {
-  const lead = await requireLead();
-  if (!process.env.APP_URL) return { error: "APP_URL is not set on the server." };
-  const { code } = await createInvite(lead, str(f, "role") === "lead" ? "lead" : "member");
-  done();
-  return { link: `${process.env.APP_URL}/join/${code}` }; // shown once, never stored
-}
-export async function cancelInvite(f: FormData) {
-  await revokeInvite(await requireLead(), str(f, "id"));
   done();
 }
 type Refusal = { error: string } | null; // returned, not thrown: production builds hide thrown action messages
@@ -78,18 +67,6 @@ export async function setRole(_: Refusal, f: FormData): Promise<Refusal> {
   if (error) return { error };
   done();
   return null;
-}
-export async function removeMember(_: Refusal, f: FormData): Promise<Refusal> {
-  const error = await removeMemberRow(await requireLead(), str(f, "id"));
-  if (error) return { error };
-  done();
-  return null;
-}
-export async function leaveTeam(): Promise<Refusal> {
-  const me = await requireMember();
-  const error = await removeMemberRow(me, me.$id);
-  if (error) return { error };
-  redirect("/welcome");
 }
 /** Returns the raw token once; only its hash is stored. The token always belongs to the caller. */
 export async function createToken(_: unknown, f: FormData): Promise<{ token: string } | null> {

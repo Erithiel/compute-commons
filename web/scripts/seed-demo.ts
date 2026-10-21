@@ -1,23 +1,23 @@
 // Demo/test queue: creates 4 easy tasks (6 items) for one member, to watch a Claude schedule drain the queue.
-//   npm run seed-demo                         (for admin@admin.com)
-//   npm run seed-demo -- someone@example.com  (for another member)
+//   npm run seed-demo               (for the team's first lead)
+//   npm run seed-demo -- "Nino"     (for another member, by name)
 // Titles get a "Demo HH:MM" prefix, so you can run it again any time without clashing with an earlier set.
 import path from "node:path";
 import { Query } from "node-appwrite";
-import { adminUsers, allRows, T } from "../lib/appwrite";
+import { allRows, T } from "../lib/appwrite";
 import { saveTask } from "../lib/tasks";
+import { TEAM_ID } from "../lib/teams";
 import type { Member } from "../lib/types";
 
-const EMAIL = process.argv[2] ?? "admin@admin.com";
+const NAME = process.argv[2]?.trim().toLowerCase();
 const REPO = path.resolve(__dirname, "../..");
 const stamp = new Date().toTimeString().slice(0, 5);
 const fileStamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
 
 async function main() {
-  const user = (await adminUsers().list([Query.equal("email", EMAIL)])).users[0];
-  if (!user) throw new Error(`No user ${EMAIL}`);
-  const me = (await allRows<Member>(T.members, [Query.equal("userId", user.$id)]))[0];
-  if (!me) throw new Error(`${EMAIL} is not on a team`);
+  const members = await allRows<Member>(T.members, [Query.equal("teamId", TEAM_ID)]);
+  const me = NAME ? members.find((m) => m.name.toLowerCase() === NAME) : members.find((m) => m.role === "lead");
+  if (!me) throw new Error(NAME ? `No member named ${process.argv[2]}` : "The team has no lead yet: sign in once first");
 
   const summaryFile = path.join(REPO, "docs", `project-summary-${fileStamp}.md`);
   const tasks = [

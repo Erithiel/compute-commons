@@ -1,5 +1,5 @@
 // MCP acceptance against a running dev server, in its own team so the real team's tasks are never touched.
-//   terminal 1: npm run dev        (APP_URL set in .env.local, for invite links)
+//   terminal 1: npm run dev        (.env.local: RELAY_TEST_USERS=smoke-lead,smoke-member,smoke-temp, which the dev server treats as CRM-approved)
 //   terminal 2: npm run mcp-smoke  (MCP_URL=http://localhost:<port>/api/mcp if not 3000)
 // Tokens carry their team, so the server needs no special env. Creates a lead and a member with tokens in team
 // "mcp-smoke", drives the tools the way Claude would, then deletes everything it made.
@@ -25,13 +25,15 @@ const text = (r: Result) => (r.content as Array<{ text: string }>)[0].text;
 const json = <X>(r: Result) => JSON.parse(text(r).split("\n\n").slice(1).join("\n\n")) as X;
 
 async function main() {
-  const member = (name: string, role: string) => db.createRow(DB_ID, T.members, ID.unique(), { teamId: TEAM_ID, userId: ID.unique(), name, role });
-  const lead = await member("Smoke Lead", "lead");
-  const mem = await member("Smoke Member", "member");
+  const member = (name: string, role: string, userId: string) => db.createRow(DB_ID, T.members, ID.unique(), { teamId: TEAM_ID, userId, name, role });
+  const lead = await member("Smoke Lead", "lead", "smoke-lead");
+  const mem = await member("Smoke Member", "member", "smoke-member");
+  const gone = await member("Smoke Gone", "member", "smoke-gone"); // not in RELAY_TEST_USERS: like someone unapproved in the CRM
 
   // Auth
   await assert.rejects(connect(), "no token must get 401");
   await assert.rejects(connect("cc_wrong"), "an unknown token must get 401");
+  await assert.rejects(connect((await createToken(TEAM_ID, gone.$id, "smoke")).token), "a member no longer approved in the CRM must be refused");
   const L = await connect((await createToken(TEAM_ID, lead.$id, "smoke")).token);
   const M = await connect((await createToken(TEAM_ID, mem.$id, "smoke")).token);
   assert.match(L.getInstructions() ?? "", /next_task[\s\S]*subagent/);
@@ -61,7 +63,7 @@ async function main() {
 
   // Management tools
   const all = (await L.listTools()).tools.map((t) => t.name);
-  for (const n of ["list_members", "list_tasks", "view_task", "list_logs", "get_policy", "create_task", "update_task", "delete_task", "set_policy", "invite_member", "set_member_role", "remove_member"]) assert.ok(all.includes(n), `missing tool ${n}`);
+  for (const n of ["list_members", "list_tasks", "view_task", "list_logs", "get_policy", "create_task", "update_task", "delete_task", "set_policy", "set_member_role"]) assert.ok(all.includes(n), `missing tool ${n}`);
 
   const people = json<Array<{ name: string; you: boolean }>>(await call(M, "list_members"));
   assert.equal(people.find((p) => p.you)?.name, "Smoke Member");
@@ -87,13 +89,10 @@ async function main() {
   const mine = json<Array<{ outcome: string }>>(await call(L, "list_logs", { member: "Smoke Member" }));
   assert.deepEqual(mine.map((l) => l.outcome), ["done", "done"]);
 
-  assert.match(text(await call(M, "remove_member", { member: "Smoke Lead" })), /Only a team lead/);
-  assert.match(text(await call(L, "remove_member", { member: "Smoke Lead" })), /at least one lead/);
+  assert.match(text(await call(M, "set_member_role", { member: "Smoke Lead", role: "member" })), /Only a team lead/);
   assert.match(text(await call(L, "set_member_role", { member: "Smoke Lead", role: "member" })), /at least one lead/);
-  assert.match(text(await call(L, "invite_member", { role: "member" })), /Invite link for a new member[\s\S]*\/join\//);
-  await member("Smoke Temp", "member");
+  await member("Smoke Temp", "member", "smoke-temp");
   assert.match(text(await call(L, "set_member_role", { member: "smoke temp", role: "lead" })), /"Smoke Temp" is now a lead/);
-  assert.match(text(await call(L, "remove_member", { member: "Smoke Temp" })), /Removed "Smoke Temp"/);
 
   assert.match(text(await call(M, "set_policy", { policy: "x" })), /Only a team lead/);
   assert.match(text(await call(M, "get_policy")), /team policy/);
@@ -105,7 +104,7 @@ async function main() {
   console.log("mcp-smoke: all checks passed");
 }
 
-/** Deletes every row this team made (members, tasks, items, claims, tokens, logs, notes, versions, invites, audit). */
+/** Deletes every row this team made (members, tasks, items, claims, tokens, logs, notes, versions, audit). */
 async function cleanup() {
   type Row = { $id: string };
   const team = [Query.equal("teamId", TEAM_ID)];
@@ -115,7 +114,7 @@ async function cleanup() {
   const items = await allRows<Row>(T.taskItems, team);
   const sets: Array<[string, Row[]]> = [
     [T.claims, items], [T.taskItems, items],
-    [T.tasks, await allRows<Row>(T.tasks, team)], [T.audit, await allRows<Row>(T.audit, team)], [T.invites, await allRows<Row>(T.invites, team)],
+    [T.tasks, await allRows<Row>(T.tasks, team)], [T.audit, await allRows<Row>(T.audit, team)],
     [T.apiTokens, await by(T.apiTokens, "owner")], [T.logs, await by(T.logs, "by")],
     [T.memberNotes, await by(T.memberNotes, "memberId")], [T.taskVersions, await by(T.taskVersions, "authorId")],
     [T.members, members],

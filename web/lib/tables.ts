@@ -3,7 +3,7 @@ export const DB_ID = process.env.APPWRITE_DATABASE_ID ?? "commons";
 export const T = {
   members: "members", tasks: "tasks", taskVersions: "task_versions", taskItems: "task_items", memberNotes: "member_notes",
   claims: "claims", takeovers: "claim_takeovers", logs: "logs", settings: "settings", apiTokens: "api_tokens", audit: "audit_log",
-  teams: "teams", invites: "invites", loginAttempts: "login_attempts",
+  teams: "teams",
 } as const;
 
 export const DEFAULT_POLICY = `Rules for every task:

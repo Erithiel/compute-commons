@@ -3,6 +3,7 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { ID, Query } from "node-appwrite";
 import { adminTables, allRows, DB_ID, rowOrNull, T } from "./appwrite";
+import { approvedUser } from "./crm";
 import type { ApiToken, Caller, Member } from "./types";
 
 export const newTokenString = () => `cc_${randomBytes(32).toString("base64url")}`;
@@ -17,13 +18,13 @@ export async function createToken(teamId: string, memberId: string, name: string
   return { token, row: row as unknown as ApiToken };
 }
 
-/** "Bearer cc_..." → the caller, or null (missing, unknown, revoked, or its member was removed). */
+/** "Bearer cc_..." → the caller, or null (missing, unknown, revoked, its member was removed, or no longer approved in the CRM). */
 export async function verifyBearer(header: string | null): Promise<Caller | null> {
   const token = header?.match(/^Bearer\s+(cc_\S+)$/i)?.[1];
   if (!token) return null;
   const [row] = await allRows<ApiToken>(T.apiTokens, [Query.equal("tokenHash", hashToken(token)), Query.equal("revoked", false)]);
   const member = row && await rowOrNull<Member>(T.members, row.owner);
-  if (!member || row.teamId !== member.teamId) return null;
+  if (!member || row.teamId !== member.teamId || !(await approvedUser(member.userId))) return null;
   await adminTables().updateRow(DB_ID, T.apiTokens, row.$id, { lastUsedAt: new Date().toISOString() });
   return { kind: "member", memberId: member.$id, teamId: member.teamId, role: member.role };
 }

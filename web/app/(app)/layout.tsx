@@ -1,6 +1,6 @@
 import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { getMember, getUser } from "@/lib/auth";
+import { getMember, getUserId } from "@/lib/auth";
 import { rowOrNull, T } from "@/lib/appwrite";
 import type { Team } from "@/lib/types";
 import { logout } from "@/app/(auth)/actions";
@@ -17,10 +17,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
 // Grid: on md the sidebar is column 1 (nav on top, account at the bottom); on mobile the account block falls below the page.
 async function Shell({ children }: { children: ReactNode }) {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  if (!(await getUserId())) redirect("/login");
   const me = await getMember();
-  if (!me) redirect("/welcome");
+  if (!me) redirect("/login?error=denied"); // signed in, but not approved in the CRM
   const team = await rowOrNull<Team>(T.teams, me.teamId);
   return (
     <div className="min-h-screen md:grid md:grid-cols-[15rem_minmax(0,1fr)] md:grid-rows-[1fr_auto]">
