@@ -62,7 +62,9 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[id]">) {
                 </div>
                 <div>
                   <label className={label}>Rows (optional): the same prompt for each row, e.g. a list of clients or sites. Each row is claimed separately, so nobody doubles up.</label>
+                  {/* ItemsTable keeps rows in local state; the key remounts it when a row's status changes so claims show up. */}
                   <ItemsTable editable={lead} columns={columns}
+                    key={rows.map((i) => itemState(s, i).label).join("|")}
                     initial={rows.map((i) => { const st = itemState(s, i); return { values: valuesOf(i), status: { label: st.label, tone: text[st.key] } }; })} />
                 </div>
                 <div className="flex flex-wrap items-center gap-4 text-sm">
